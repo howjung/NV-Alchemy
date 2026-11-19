@@ -97,6 +97,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
   int _quantity = 1;
   int _skips = 0;
   String _delivery = '문 앞에 놓아 주세요';
+  String _payment = '등록한 카드 ···· 1234';
 
   @override
   void didUpdateWidget(covariant ShoppingTab oldWidget) {
@@ -141,22 +142,28 @@ class _ShoppingTabState extends State<ShoppingTab> {
     _toast('장바구니에서 뺐어요');
   }
 
-  void _toast(String message) => ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
+  // 장바구니 바(담은 상품이 있을 때)를 가리지 않도록 그 위에 띄운다.
+  void _toast(String message, {double width = 160}) {
+    // 앱 화면 폭(창 폭이 아니라 이 탭이 실제로 차지하는 폭) 기준으로 가운데에 둔다.
+    final side = ((context.size?.width ?? 402) - width) / 2;
+    final bottom = _view == ShoppingView.catalog && _count > 0 ? 80.0 : 24.0;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+          ),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.fromLTRB(side, 0, side, bottom),
+          duration: const Duration(seconds: 2),
+          backgroundColor: _green,
+          shape: const StadiumBorder(),
         ),
-        behavior: SnackBarBehavior.floating,
-        width: 160,
-        duration: const Duration(milliseconds: 1500),
-        backgroundColor: _green,
-        shape: const StadiumBorder(),
-      ),
-    );
+      );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +219,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
                         AppMenu<String>(
                           tooltip: '장바구니',
                           width: _cart.isEmpty ? 240 : 310,
-                          offset: Offset(_cart.isEmpty ? -192 : -262, 0),
+                          offset: Offset(_cart.isEmpty ? -200 : -270, 0),
                           selected: 'view',
                           items: [
                             if (_cart.isEmpty)
@@ -319,22 +326,20 @@ class _ShoppingTabState extends State<ShoppingTab> {
                   const SizedBox(height: 12),
                   const Text('카테고리 선택', style: _caption),
                   const SizedBox(height: 5),
-                  _panel([
-                    AppMenu<String>(
-                      tooltip: '카테고리 선택',
-                      width: 362,
-                      selected: _category,
-                      items: [
-                        for (final value in [
-                          '전체 상품',
-                          ..._products.map((product) => product.category),
-                        ])
-                          AppMenuItem(value, value),
-                      ],
-                      onSelected: (value) => setState(() => _category = value),
-                      child: _menuLabel(_category, bold: true),
-                    ),
-                  ]),
+                  AppMenu<String>(
+                    tooltip: '카테고리 선택',
+                    width: 362,
+                    selected: _category,
+                    items: [
+                      for (final value in [
+                        '전체 상품',
+                        ..._products.map((product) => product.category),
+                      ])
+                        AppMenuItem(value, value),
+                    ],
+                    onSelected: (value) => setState(() => _category = value),
+                    child: _panel([_menuLabel(_category, bold: true)]),
+                  ),
                   Row(
                     children: [
                       Expanded(
@@ -420,72 +425,79 @@ class _ShoppingTabState extends State<ShoppingTab> {
     final product = _products[index];
     final expanded = _compared.contains(index);
     return _panel([
-      InkWell(
-        onTap: () => _productSheet(index),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                _thumb(index, 92),
-                Positioned(
-                  left: 3,
-                  top: 3,
-                  child: Material(
-                    color: Colors.white,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () => setState(() {
-                        if (!_favorites.add(index)) _favorites.remove(index);
-                      }),
-                      child: Padding(
-                        padding: const EdgeInsets.all(5),
-                        child: Icon(
-                          _favorites.contains(index)
-                              ? Icons.favorite
-                              : Icons.favorite_border,
-                          size: 15,
-                          color: _muted,
+      Semantics(
+        button: true,
+        hint: '상품 상세 보기',
+        child: InkWell(
+          onTap: () => _productSheet(index),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                children: [
+                  _thumb(index, 92),
+                  Positioned(
+                    left: 3,
+                    top: 3,
+                    child: Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () => setState(() {
+                          if (!_favorites.add(index)) _favorites.remove(index);
+                        }),
+                        child: Padding(
+                          padding: const EdgeInsets.all(5),
+                          child: Icon(
+                            _favorites.contains(index)
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            size: 15,
+                            color: _muted,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 5,
-                    runSpacing: 4,
-                    children: [_tag(product.category), _tag('AI 추천', ai: true)],
-                  ),
-                  const SizedBox(height: 5),
-                  Text(product.name, style: _bold),
-                  Text(product.nutrition, style: _caption),
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      Text(
-                        'AI 적합도 ${product.score}%',
-                        style: const TextStyle(
-                          color: _ai,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(child: _bar(product.score / 100, _ai)),
-                    ],
-                  ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 4,
+                      children: [
+                        _tag(product.category),
+                        _tag('AI 추천', ai: true),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(product.name, style: _bold),
+                    Text(product.nutrition, style: _caption),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Text(
+                          'AI 적합도 ${product.score}%',
+                          style: const TextStyle(
+                            color: _ai,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: _bar(product.score / 100, _ai)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       const SizedBox(height: 14),
@@ -636,33 +648,40 @@ class _ShoppingTabState extends State<ShoppingTab> {
       ),
       _section(
         '배송지',
-        _panel([
-          _pair('홍길동', '기본', strong: true),
-          const SizedBox(height: 6),
-          const Text(
-            '경기도 성남시 수정구 ○○로 123\n101동 1001호 · 010-0000-1234',
-            style: _caption,
-          ),
-        ]),
-      ),
-      _panel([
         AppMenu<String>(
-          tooltip: '배송 요청사항 선택',
+          tooltip: '배송지 선택',
           width: 362,
-          selected: _delivery,
-          items: [
-            for (final value in [
-              '문 앞에 놓아 주세요',
-              '경비실에 맡겨 주세요',
-              '직접 받을게요',
-              '배송 전에 연락 주세요',
-            ])
-              AppMenuItem(value, value),
+          selected: 'saved',
+          items: const [
+            AppMenuItem('saved', '홍길동 · 경기도 성남시 수정구 ○○로 123'),
+            AppMenuItem('new', '새 배송지 추가'),
           ],
-          onSelected: (value) => setState(() => _delivery = value),
-          child: _menuLabel(_delivery),
+          child: _panel([
+            _pair('홍길동', '기본', strong: true),
+            const SizedBox(height: 6),
+            const Text(
+              '경기도 성남시 수정구 ○○로 123\n101동 1001호 · 010-0000-1234',
+              style: _caption,
+            ),
+          ]),
         ),
-      ]),
+      ),
+      AppMenu<String>(
+        tooltip: '배송 요청사항 선택',
+        width: 362,
+        selected: _delivery,
+        items: [
+          for (final value in [
+            '문 앞에 놓아 주세요',
+            '경비실에 맡겨 주세요',
+            '직접 받을게요',
+            '배송 전에 연락 주세요',
+          ])
+            AppMenuItem(value, value),
+        ],
+        onSelected: (value) => setState(() => _delivery = value),
+        child: _panel([_menuLabel(_delivery)]),
+      ),
       const SizedBox(height: 10),
       _section(
         '포인트 사용',
@@ -688,7 +707,23 @@ class _ShoppingTabState extends State<ShoppingTab> {
           const Text('500P부터 100P 단위로 사용할 수 있어요. (1P = 1원)', style: _caption),
         ]),
       ),
-      _section('결제 수단', _panel([const Text('등록한 카드 ···· 1234')])),
+      _section(
+        '결제 수단',
+        AppMenu<String>(
+          tooltip: '결제 수단 선택',
+          width: 362,
+          selected: _payment,
+          items: [
+            for (final value in ['등록한 카드 ···· 1234', '새 카드 등록', '계좌이체'])
+              AppMenuItem(value, value),
+          ],
+          // 새 카드 등록은 입력 항목이 정해지기 전(PRD N9)이라 선택만 닫는다.
+          onSelected: (value) {
+            if (value != '새 카드 등록') setState(() => _payment = value);
+          },
+          child: _panel([_menuLabel(_payment)]),
+        ),
+      ),
       _section(
         '결제 금액',
         _panel([
@@ -719,6 +754,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
     final value = await showModalBottomSheet<int>(
       context: context,
       isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 402),
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -737,6 +773,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
     final sellers = _sellers.take(index == 3 ? 2 : 3).toList();
     return showModalBottomSheet<void>(
       context: context,
+      constraints: const BoxConstraints(maxWidth: 402),
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -746,7 +783,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
                 product.name,
@@ -791,6 +828,9 @@ class _ShoppingTabState extends State<ShoppingTab> {
                         backgroundColor: _chip,
                         foregroundColor: _green,
                         padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
                       onPressed: () {
                         Navigator.pop(sheetContext);
@@ -804,13 +844,22 @@ class _ShoppingTabState extends State<ShoppingTab> {
                     width: 100,
                     height: 48,
                     child: FilledButton(
-                      style: FilledButton.styleFrom(padding: EdgeInsets.zero),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _green,
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
                       onPressed: () {
                         Navigator.pop(sheetContext);
                         _change(index, (_cart[index] ?? 0) + 1);
                         _toast('장바구니에 담았어요');
                       },
-                      child: const Text('장바구니 담기'),
+                      child: const FittedBox(
+                        child: Text('장바구니 담기', style: _bold),
+                      ),
                     ),
                   ),
                 ],
@@ -943,6 +992,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
     var day = managing ? _day : '월';
     var quantity = managing ? _quantity : 1;
     var skips = managing ? _skips : 0;
+    var firstDate = '10월 26일 (월)';
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (context) => StatefulBuilder(
@@ -1015,17 +1065,40 @@ class _ShoppingTabState extends State<ShoppingTab> {
                   ),
                 ]),
                 const SizedBox(height: 10),
-                _panel([
-                  _pair(
-                    managing ? '다음 배송' : '첫 배송일',
-                    '다음 $day요일',
-                    strong: true,
+                if (managing)
+                  _panel([_pair('다음 배송', '다음 $day요일', strong: true)])
+                else
+                  AppMenu<String>(
+                    tooltip: '첫 배송일 선택',
+                    width: 362,
+                    selected: firstDate,
+                    items: [
+                      for (final value in [
+                        '10월 26일 (월)',
+                        '10월 28일 (수)',
+                        '11월 2일 (월)',
+                      ])
+                        AppMenuItem(value, value),
+                    ],
+                    onSelected: (value) => update(() => firstDate = value),
+                    child: _panel([
+                      Row(
+                        children: [
+                          const Text('첫 배송일', style: TextStyle(color: _muted)),
+                          const Spacer(),
+                          Text(firstDate, style: _bold),
+                          const Icon(Icons.keyboard_arrow_down, color: _muted),
+                        ],
+                      ),
+                    ]),
                   ),
-                ]),
                 if (managing) ...[
                   const SizedBox(height: 10),
                   OutlinedButton(
-                    onPressed: () => update(() => skips++),
+                    onPressed: () {
+                      update(() => skips++);
+                      _toast('다음 배송 1회를 건너뛰어요', width: 200);
+                    },
                     child: Text('다음 배송 1회 건너뛰기 · $skips회'),
                   ),
                   TextButton(
@@ -1174,12 +1247,10 @@ Widget _pair(String label, String value, {bool strong = false}) => Row(
       ),
     ),
     const SizedBox(width: 8),
-    Flexible(
-      child: Text(
-        value,
-        textAlign: TextAlign.end,
-        style: strong ? _bold : const TextStyle(color: _muted),
-      ),
+    Text(
+      value,
+      textAlign: TextAlign.end,
+      style: strong ? _bold : const TextStyle(color: _muted),
     ),
   ],
 );
@@ -1272,7 +1343,7 @@ Widget _menuLabel(
     style: TextStyle(color: color, fontWeight: bold ? FontWeight.w700 : null),
   );
   return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 10),
+    padding: EdgeInsets.symmetric(vertical: fill ? 0 : 10),
     child: Row(
       mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
       children: [
@@ -1468,9 +1539,9 @@ class _PointSheetState extends State<_PointSheet> {
           SizedBox(
             width: double.infinity,
             height: 52,
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, _value),
-              child: Text(_value == 0 ? '사용 안 함' : '${_p(_value)} 사용하기'),
+            child: _button(
+              _value == 0 ? '사용 안 함' : '${_p(_value)} 사용하기',
+              () => Navigator.pop(context, _value),
             ),
           ),
         ],
