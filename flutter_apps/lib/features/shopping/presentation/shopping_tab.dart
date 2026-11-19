@@ -178,12 +178,16 @@ class _ShoppingTabState extends State<ShoppingTab> {
   }
 
   Future<void> _addAddress() async {
+    final before = userAddresses.length;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => const ProfileTab(initialView: ProfileView.address),
       ),
     );
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      if (userAddresses.length > before) _address = userAddresses.length - 1;
+    });
   }
 
   @override
@@ -843,6 +847,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
           _pair('최종 결제 금액', _won(_subtotal - _points), strong: true),
         ]),
       ),
+      if (_payBlocker != null) Text(_payBlocker!, style: _caption),
       Material(
         type: MaterialType.transparency,
         child: CheckboxListTile(
@@ -855,9 +860,18 @@ class _ShoppingTabState extends State<ShoppingTab> {
     ],
     action: _button(
       '${_won(_subtotal - _points)} 결제하기',
-      !_agreed || _cart.isEmpty ? null : _placeOrder,
+      _payBlocker == null ? _placeOrder : null,
     ),
   );
+
+  // 결제 버튼이 꺼진 이유. 결제할 수 있으면 null.
+  String? get _payBlocker => _cart.isEmpty
+      ? '담은 상품이 없어요.'
+      : userAddresses.isEmpty
+      ? '배송지를 먼저 추가해 주세요.'
+      : !_agreed
+      ? '주문 내용 확인에 동의하면 결제할 수 있어요.'
+      : null;
 
   Future<void> _pickPoints() async {
     final value = await showModalBottomSheet<int>(
@@ -997,38 +1011,43 @@ class _ShoppingTabState extends State<ShoppingTab> {
     _view = ShoppingView.complete;
   });
 
+  int _qty(Map<int, int> items) => items.values.fold(0, (a, b) => a + b);
+
   String _orderName(Map<int, int> items) {
     final first = _products[items.keys.first].name;
     return items.length == 1 ? first : '$first 외 ${items.length - 1}개';
   }
 
-  Widget _complete() =>
-      _page('주문 완료', '쇼핑', () => _open(ShoppingView.catalog), [
-        const SizedBox(height: 24),
-        const Icon(Icons.check_circle, color: Color(0xFF11836C), size: 56),
-        const SizedBox(height: 12),
-        Center(
-          child: Text(
-            _orders.isEmpty ? '완료된 주문이 없어요' : '주문이 완료됐어요',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
+  Widget
+  _complete() => _page('주문 완료', '쇼핑', () => _open(ShoppingView.catalog), [
+    const SizedBox(height: 24),
+    const Icon(Icons.check_circle, color: Color(0xFF11836C), size: 56),
+    const SizedBox(height: 12),
+    Center(
+      child: Text(
+        _orders.isEmpty ? '완료된 주문이 없어요' : '주문이 완료됐어요',
+        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      ),
+    ),
+    const SizedBox(height: 14),
+    if (_orders.isNotEmpty)
+      _panel([
+        _pair(
+          '주문 상품',
+          '${_orderName(_orders.first.items)} · ${_qty(_orders.first.items)}개',
         ),
-        const SizedBox(height: 14),
-        if (_orders.isNotEmpty)
-          _panel([
-            _pair('주문 상품', _orderName(_orders.first.items)),
-            const Divider(color: AppTheme.border),
-            _pair('사용 포인트', '${_orders.first.points}P'),
-            _pair('결제 금액', _won(_orders.first.total), strong: true),
-            Text(_orders.first.payment, style: _caption),
-          ]),
-        const SizedBox(height: 18),
-        _button('주문 내역 보기', () => _open(ShoppingView.orders)),
-        TextButton(
-          onPressed: () => _open(ShoppingView.catalog),
-          child: const Text('쇼핑 계속하기'),
-        ),
-      ]);
+        const Divider(color: AppTheme.border),
+        _pair('사용 포인트', '${_orders.first.points}P'),
+        _pair('결제 금액', _won(_orders.first.total), strong: true),
+        Text(_orders.first.payment, style: _caption),
+      ]),
+    const SizedBox(height: 18),
+    _button('주문 내역 보기', () => _open(ShoppingView.orders)),
+    TextButton(
+      onPressed: () => _open(ShoppingView.catalog),
+      child: const Text('쇼핑 계속하기'),
+    ),
+  ]);
 
   Widget _history() => _page(
     '주문 · 구독 내역',
@@ -1063,7 +1082,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(_orderName(order.items)),
-                subtitle: const Text('결제 완료'),
+                subtitle: Text('2026.10.21 · ${_qty(order.items)}개 · 결제 완료'),
                 trailing: Text(_won(order.total), style: _bold),
                 onTap: () => _detail(order),
               ),
@@ -1097,10 +1116,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
               ),
             ),
             const SizedBox(height: 6),
-            Text(
-              '2026.10.21 주문 · ${order.items.values.fold(0, (a, b) => a + b)}개',
-              style: _caption,
-            ),
+            Text('2026.10.21 주문 · ${_qty(order.items)}개', style: _caption),
           ]),
           const SizedBox(height: 12),
           Padding(
