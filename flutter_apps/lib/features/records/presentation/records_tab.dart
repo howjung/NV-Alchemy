@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
@@ -642,62 +643,16 @@ class _RecordsTabState extends State<RecordsTab> {
 
   Future<void> _showMealDetails(HomeMeal meal) async {
     final date = _date;
-    final deleted = await showHomeSheet<bool>(
+    final result = await showHomeSheet<({bool deleted, HomeMeal meal})>(
       context,
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text('${meal.type} 식단 상세', style: _bold)),
-              IconButton(
-                tooltip: '닫기',
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          Text(
-            MaterialLocalizations.of(context).formatFullDate(date),
-            style: _muted,
-          ),
-          const SizedBox(height: 20),
-          Text(meal.values[0], style: _bold.copyWith(fontSize: 20)),
-          const SizedBox(height: 16),
-          for (final (label, value) in [
-            ('칼로리', '${meal.values[1]} kcal'),
-            ('탄수화물', '${meal.values[2]} g'),
-            ('단백질', '${meal.values[3]} g'),
-            ('지방', '${meal.values[4]} g'),
-          ])
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                children: [
-                  Expanded(child: Text(label, style: _muted)),
-                  Text(value, style: _bold),
-                ],
-              ),
-            ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('식단 삭제'),
-            ),
-          ),
-        ],
-      ),
+      _MealDetailsSheet(meal: meal, date: date),
     );
-    if (!mounted || deleted != true) return;
-    widget.onMealDeleted(date, meal.type);
+    if (!mounted || result == null) return;
+    if (result.deleted) {
+      widget.onMealDeleted(date, meal.type);
+    } else {
+      widget.onMealSaved(date, result.meal);
+    }
   }
 
   Widget _meal(String label, HomeMeal? meal) {
@@ -786,4 +741,129 @@ class _RecordsTabState extends State<RecordsTab> {
       ),
     );
   }
+}
+
+class _MealDetailsSheet extends StatefulWidget {
+  const _MealDetailsSheet({required this.meal, required this.date});
+  final HomeMeal meal;
+  final DateTime date;
+
+  @override
+  State<_MealDetailsSheet> createState() => _MealDetailsSheetState();
+}
+
+class _MealDetailsSheetState extends State<_MealDetailsSheet> {
+  late final _fields = [
+    for (final value in widget.meal.values.skip(1))
+      TextEditingController(text: value),
+  ];
+
+  @override
+  void dispose() {
+    for (final field in _fields) {
+      field.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${widget.meal.type} 식단 상세',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+          IconButton(
+            tooltip: '닫기',
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+      Text(
+        MaterialLocalizations.of(context).formatFullDate(widget.date),
+        style: const TextStyle(color: AppTheme.muted),
+      ),
+      const SizedBox(height: 20),
+      Text(
+        widget.meal.values[0],
+        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 16),
+      for (var i = 0; i < _fields.length; i++)
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                ['칼로리', '탄수화물', '단백질', '지방'][i],
+                style: const TextStyle(color: AppTheme.muted),
+              ),
+            ),
+            SizedBox(
+              width: 110,
+              child: TextField(
+                controller: _fields[i],
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                textAlign: TextAlign.end,
+                decoration: const InputDecoration(
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  hintText: '0',
+                ),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              i == 0 ? 'kcal' : 'g',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      const SizedBox(height: 20),
+      PrimaryButton(
+        label: '저장',
+        onPressed: () => Navigator.pop(context, (
+          deleted: false,
+          meal: (
+            type: widget.meal.type,
+            values: [
+              widget.meal.values[0],
+              for (final field in _fields)
+                (int.tryParse(field.text) ?? 0).toString(),
+            ],
+          ),
+        )),
+      ),
+      const SizedBox(height: 10),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFDF5050),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          onPressed: () =>
+              Navigator.pop(context, (deleted: true, meal: widget.meal)),
+          child: const Text(
+            '식단 삭제',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+    ],
+  );
 }
