@@ -157,4 +157,41 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('2400 P'), findsOneWidget);
   });
+
+  testWidgets('checkout payment menu switches the method', (tester) async {
+    await _pump(tester);
+    await tester.tap(find.text('장바구니 담기').first);
+    await tester.pump(const Duration(seconds: 3));
+    await _openCart(tester);
+    await tester.tap(find.text('6,900원 주문하기'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byTooltip('결제 수단 선택'));
+    await tester.tap(find.byTooltip('결제 수단 선택'));
+    await tester.pumpAndSettle();
+    expect(find.text('새 카드 등록'), findsOneWidget);
+    await tester.tap(find.text('계좌이체'));
+    await tester.pumpAndSettle();
+    expect(find.text('계좌이체'), findsOneWidget);
+
+    // 새 카드 등록은 선택해도 바뀌지 않는다(입력 항목 미확정).
+    await tester.tap(find.byTooltip('결제 수단 선택'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('새 카드 등록'));
+    await tester.pumpAndSettle();
+    expect(find.text('계좌이체'), findsOneWidget);
+  });
+
+  testWidgets('toast sits above the cart bar instead of covering it', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await tester.tap(find.text('장바구니 담기').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final toast = tester.getRect(find.text('장바구니에 담았어요'));
+    final bar = tester.getRect(find.text('장바구니 보기'));
+    expect(toast.bottom, lessThan(bar.top));
+  });
 }
