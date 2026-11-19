@@ -10,6 +10,7 @@ Future<bool> showConfirmPopup(
   BuildContext context, {
   required String title,
   required String confirmLabel,
+  String cancelLabel = '취소',
   String? message,
 }) async {
   final confirmed = await showDialog<bool>(
@@ -52,7 +53,7 @@ Future<bool> showConfirmPopup(
                 children: [
                   Expanded(
                     child: _PopupButton(
-                      label: '취소',
+                      label: cancelLabel,
                       background: _soft,
                       foreground: AppTheme.primary,
                       onPressed: () => Navigator.pop(context, false),

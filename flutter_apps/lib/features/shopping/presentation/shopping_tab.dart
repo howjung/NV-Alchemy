@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_overlays.dart';
 
 const _green = AppTheme.primary;
 const _muted = AppTheme.muted;
@@ -121,6 +122,35 @@ class _ShoppingTabState extends State<ShoppingTab> {
     if (_points > _pointLimit) _points = _pointLimit;
   });
 
+  Future<void> _confirmRemove(int index) async {
+    final confirmed = await showConfirmPopup(
+      context,
+      title: '상품을 뺄까요?',
+      message: _products[index].name,
+      confirmLabel: '빼기',
+    );
+    if (!confirmed || !mounted) return;
+    _change(index, 0);
+    _toast('장바구니에서 뺐어요');
+  }
+
+  void _toast(String message) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+        ),
+        behavior: SnackBarBehavior.floating,
+        width: 160,
+        duration: const Duration(milliseconds: 1500),
+        backgroundColor: _green,
+        shape: const StadiumBorder(),
+      ),
+    );
+
   @override
   Widget build(BuildContext context) {
     if (_view == ShoppingView.catalog) return _catalog();
@@ -145,6 +175,8 @@ class _ShoppingTabState extends State<ShoppingTab> {
     ];
     if (_sort == '낮은 가격순') {
       visible.sort((a, b) => _products[a].price.compareTo(_products[b].price));
+    } else if (_sort == 'AI 적합도순') {
+      visible.sort((a, b) => _products[b].score.compareTo(_products[a].score));
     }
     return ColoredBox(
       color: _mint,
@@ -261,28 +293,19 @@ class _ShoppingTabState extends State<ShoppingTab> {
                   const Text('카테고리 선택', style: _caption),
                   const SizedBox(height: 5),
                   _panel([
-                    DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _category,
-                        isExpanded: true,
-                        isDense: true,
-                        items:
-                            [
-                                  '전체 상품',
-                                  ..._products.map(
-                                    (product) => product.category,
-                                  ),
-                                ]
-                                .map(
-                                  (value) => DropdownMenuItem(
-                                    value: value,
-                                    child: Text(value, style: _bold),
-                                  ),
-                                )
-                                .toList(),
-                        onChanged: (value) =>
-                            setState(() => _category = value!),
-                      ),
+                    AppMenu<String>(
+                      tooltip: '카테고리 선택',
+                      width: 362,
+                      selected: _category,
+                      items: [
+                        for (final value in [
+                          '전체 상품',
+                          ..._products.map((product) => product.category),
+                        ])
+                          AppMenuItem(value, value),
+                      ],
+                      onSelected: (value) => setState(() => _category = value),
+                      child: _menuLabel(_category, bold: true),
                     ),
                   ]),
                   Row(
@@ -293,26 +316,21 @@ class _ShoppingTabState extends State<ShoppingTab> {
                           style: const TextStyle(color: _muted),
                         ),
                       ),
-                      DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _sort,
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'AI 추천순',
-                              child: Text(
-                                'AI 추천순',
-                                style: TextStyle(
-                                  color: _ai,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: '낮은 가격순',
-                              child: Text('낮은 가격순'),
-                            ),
-                          ],
-                          onChanged: (value) => setState(() => _sort = value!),
+                      AppMenu<String>(
+                        tooltip: '정렬 선택',
+                        width: 160,
+                        selected: _sort,
+                        items: const [
+                          AppMenuItem('AI 추천순', 'AI 추천순'),
+                          AppMenuItem('낮은 가격순', '낮은 가격순'),
+                          AppMenuItem('AI 적합도순', 'AI 적합도순'),
+                        ],
+                        onSelected: (value) => setState(() => _sort = value),
+                        child: _menuLabel(
+                          _sort,
+                          color: _sort == 'AI 추천순' ? _ai : null,
+                          bold: _sort == 'AI 추천순',
+                          fill: false,
                         ),
                       ),
                     ],
@@ -484,10 +502,10 @@ class _ShoppingTabState extends State<ShoppingTab> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: _button(
-              '장바구니 담기',
-              () => _change(index, (_cart[index] ?? 0) + 1),
-            ),
+            child: _button('장바구니 담기', () {
+              _change(index, (_cart[index] ?? 0) + 1);
+              _toast('장바구니에 담았어요');
+            }),
           ),
         ],
       ),
@@ -525,11 +543,13 @@ class _ShoppingTabState extends State<ShoppingTab> {
                         Expanded(
                           child: _stepper(
                             item.value,
-                            (value) => _change(item.key, value),
+                            (value) => value <= 0
+                                ? _confirmRemove(item.key)
+                                : _change(item.key, value),
                           ),
                         ),
                         TextButton(
-                          onPressed: () => _change(item.key, 0),
+                          onPressed: () => _confirmRemove(item.key),
                           child: const Text(
                             '빼기',
                             style: TextStyle(color: Color(0xFFB54E45)),
@@ -596,20 +616,21 @@ class _ShoppingTabState extends State<ShoppingTab> {
         ]),
       ),
       _panel([
-        DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: _delivery,
-            isExpanded: true,
-            items: const [
-              DropdownMenuItem(
-                value: '문 앞에 놓아 주세요',
-                child: Text('문 앞에 놓아 주세요'),
-              ),
-              DropdownMenuItem(value: '직접 받을게요', child: Text('직접 받을게요')),
-              DropdownMenuItem(value: '기타', child: Text('기타')),
-            ],
-            onChanged: (value) => setState(() => _delivery = value!),
-          ),
+        AppMenu<String>(
+          tooltip: '배송 요청사항 선택',
+          width: 362,
+          selected: _delivery,
+          items: [
+            for (final value in [
+              '문 앞에 놓아 주세요',
+              '경비실에 맡겨 주세요',
+              '직접 받을게요',
+              '배송 전에 연락 주세요',
+            ])
+              AppMenuItem(value, value),
+          ],
+          onSelected: (value) => setState(() => _delivery = value),
+          child: _menuLabel(_delivery),
         ),
       ]),
       const SizedBox(height: 10),
@@ -893,26 +914,14 @@ class _ShoppingTabState extends State<ShoppingTab> {
                   ),
                   TextButton(
                     onPressed: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (dialogContext) => AlertDialog(
-                          title: const Text('구독 해지'),
-                          content: const Text('정기 배송 구독을 해지하시겠어요?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.pop(dialogContext, false),
-                              child: const Text('유지하기'),
-                            ),
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.pop(dialogContext, true),
-                              child: const Text('구독 해지'),
-                            ),
-                          ],
-                        ),
+                      final confirmed = await showConfirmPopup(
+                        context,
+                        title: '구독을 해지할까요?',
+                        message: '다음 배송부터 받을 수 없어요.\n이미 결제한 배송은 그대로 도착해요.',
+                        confirmLabel: '해지하기',
+                        cancelLabel: '유지하기',
                       );
-                      if (confirmed == true && context.mounted) {
+                      if (confirmed && context.mounted) {
                         Navigator.pop(context, false);
                       }
                     },
@@ -1135,6 +1144,28 @@ Widget _stepper(int quantity, ValueChanged<int> onChanged, {int minimum = 0}) =>
         ),
       ],
     );
+
+Widget _menuLabel(
+  String text, {
+  Color? color,
+  bool bold = false,
+  bool fill = true,
+}) {
+  final label = Text(
+    text,
+    style: TextStyle(color: color, fontWeight: bold ? FontWeight.w700 : null),
+  );
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    child: Row(
+      mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        if (fill) Expanded(child: label) else label,
+        const Icon(Icons.keyboard_arrow_down, color: _muted),
+      ],
+    ),
+  );
+}
 
 Widget _bar(double value, Color color) => LinearProgressIndicator(
   value: value,
