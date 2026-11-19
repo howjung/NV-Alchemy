@@ -34,6 +34,13 @@ class _SocialTabState extends State<SocialTab> {
   final _posts = <String>[];
   final _members = [for (var i = 0; i < 4; i++) '프로필 이름'];
   final _requests = [false, false, false, false];
+  final _postStore = PostInteractionStore();
+
+  @override
+  void dispose() {
+    _postStore.dispose();
+    super.dispose();
+  }
 
   bool get _inCrew => _created != null || _joined != null;
 
@@ -453,7 +460,9 @@ class _SocialTabState extends State<SocialTab> {
   );
 
   void _openPost(int index) => Navigator.of(context).push<void>(
-    MaterialPageRoute(builder: (_) => PostDetailScreen(photoIndex: index)),
+    MaterialPageRoute(
+      builder: (_) => PostDetailScreen(photoIndex: index, store: _postStore),
+    ),
   );
 
   Future<void> _create() async {
