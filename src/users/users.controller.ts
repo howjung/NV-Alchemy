@@ -1,34 +1,25 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch } from '@nestjs/common';
+import { UserId } from '../auth/user-id.decorator';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
 
-@Controller('users')
+// 다른 사람의 번호를 받는 API는 없다. 항상 "로그인한 나"만 다룬다.
+@Controller('users/me')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
-
-  @Post()
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
-  }
+  constructor(private readonly users: UsersService) {}
 
   @Get()
-  findAll() {
-    return this.usersService.findAll();
+  findMe(@UserId() userId: number) {
+    return this.users.findMe(userId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(+id);
+  @Patch()
+  update(@UserId() userId: number, @Body() dto: UpdateProfileDto) {
+    return this.users.updateMe(userId, dto);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(+id, updateUserDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(+id);
+  @Delete()
+  remove(@UserId() userId: number) {
+    return this.users.remove(userId);
   }
 }

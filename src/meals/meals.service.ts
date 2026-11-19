@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -55,25 +55,29 @@ export class MealsService {
     return JSON.parse(response.text || '{}');
   }
 
-  create(createMealDto: CreateMealDto) {
-    const meal = this.mealsRepository.create(createMealDto);
-    return this.mealsRepository.save(meal);
+  // 모든 조회·수정·삭제에 userId 조건을 같이 걸어서, 남의 기록은 "없는 것"처럼 보이게 한다.
+  create(userId: number, dto: CreateMealDto) {
+    return this.mealsRepository.save(this.mealsRepository.create({ ...dto, userId }));
   }
 
-  findAll() {
-    return this.mealsRepository.find();
+  findAll(userId: number) {
+    return this.mealsRepository.find({ where: { userId }, order: { recordedDate: 'ASC', id: 'ASC' } });
   }
 
-  findOne(id: number) {
-    return this.mealsRepository.findOneBy({ id });
+  async findOne(userId: number, id: number) {
+    const meal = await this.mealsRepository.findOneBy({ id, userId });
+    if (!meal) throw new NotFoundException('식단 기록을 찾을 수 없어요.');
+    return meal;
   }
 
-  async update(id: number, updateMealDto: UpdateMealDto) {
-    await this.mealsRepository.update(id, updateMealDto);
-    return this.findOne(id);
+  async update(userId: number, id: number, dto: UpdateMealDto) {
+    await this.findOne(userId, id); // 내 기록인지 먼저 확인
+    await this.mealsRepository.update({ id, userId }, dto);
+    return this.findOne(userId, id);
   }
 
-  remove(id: number) {
-    return this.mealsRepository.delete(id);
+  async remove(userId: number, id: number) {
+    await this.findOne(userId, id);
+    return this.mealsRepository.delete({ id, userId });
   }
 }

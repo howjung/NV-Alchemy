@@ -5,6 +5,7 @@ import {
   Body,
   Patch,
   Param,
+  ParseIntPipe,
   Delete,
   UseInterceptors,
   UploadedFile,
@@ -12,6 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { UserId } from '../auth/user-id.decorator';
 import { MealsService } from './meals.service';
 import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
@@ -45,27 +47,27 @@ export class MealsController {
   }
 
   @Post()
-  create(@Body() createMealDto: CreateMealDto) {
-    return this.mealsService.create(createMealDto);
+  create(@UserId() userId: number, @Body() dto: CreateMealDto) {
+    return this.mealsService.create(userId, dto);
   }
 
   @Get()
-  findAll() {
-    return this.mealsService.findAll();
+  findAll(@UserId() userId: number) {
+    return this.mealsService.findAll(userId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.mealsService.findOne(+id);
+  findOne(@UserId() userId: number, @Param('id', ParseIntPipe) id: number) {
+    return this.mealsService.findOne(userId, id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateMealDto: UpdateMealDto) {
-    return this.mealsService.update(+id, updateMealDto);
+  update(@UserId() userId: number, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMealDto) {
+    return this.mealsService.update(userId, id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.mealsService.remove(+id);
+  remove(@UserId() userId: number, @Param('id', ParseIntPipe) id: number) {
+    return this.mealsService.remove(userId, id);
   }
 }

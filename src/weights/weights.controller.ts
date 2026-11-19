@@ -1,34 +1,35 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { WeightsService } from './weights.service';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import { UserId } from '../auth/user-id.decorator';
 import { CreateWeightDto } from './dto/create-weight.dto';
 import { UpdateWeightDto } from './dto/update-weight.dto';
+import { WeightsService } from './weights.service';
 
 @Controller('weights')
 export class WeightsController {
-  constructor(private readonly weightsService: WeightsService) {}
+  constructor(private readonly weights: WeightsService) {}
 
   @Post()
-  create(@Body() createWeightDto: CreateWeightDto) {
-    return this.weightsService.create(createWeightDto);
+  create(@UserId() userId: number, @Body() dto: CreateWeightDto) {
+    return this.weights.create(userId, dto);
   }
 
   @Get()
-  findAll() {
-    return this.weightsService.findAll();
+  findAll(@UserId() userId: number) {
+    return this.weights.findAll(userId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.weightsService.findOne(+id);
+  findOne(@UserId() userId: number, @Param('id', ParseIntPipe) id: number) {
+    return this.weights.findOne(userId, id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateWeightDto: UpdateWeightDto) {
-    return this.weightsService.update(+id, updateWeightDto);
+  update(@UserId() userId: number, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateWeightDto) {
+    return this.weights.update(userId, id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.weightsService.remove(+id);
+  remove(@UserId() userId: number, @Param('id', ParseIntPipe) id: number) {
+    return this.weights.remove(userId, id);
   }
 }

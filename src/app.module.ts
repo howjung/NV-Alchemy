@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthGuard } from './auth/auth.guard';
+import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WeightsModule } from './weights/weights.module';
 import { MealsModule } from './meals/meals.module';
@@ -40,11 +43,13 @@ import { MealsModule } from './meals/meals.module';
               synchronize: true,
             },
     }),
+    AuthModule,
     UsersModule,
     WeightsModule,
     MealsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  // 전역 문지기: 모든 API는 로그인이 필요하고, @Public()이 붙은 API만 예외
+  providers: [AppService, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}
