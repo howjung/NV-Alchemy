@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_overlays.dart';
+import 'crew_post_card.dart';
+import 'post_detail_screen.dart';
 
 const _ink = AppTheme.primary;
 const _muted = AppTheme.muted;
@@ -10,6 +13,16 @@ const _blue = Color(0xFFE2F1F3);
 const _crewName = '칼로리 컷어스';
 const _crewGoal = '-5kg 감량 | 밀키트 식단 위주';
 const _gutter = EdgeInsets.symmetric(horizontal: 20);
+
+// 크루 피드 샘플 게시물 (Figma SOC-03).
+const _crewSamples = [
+  (meta: '점심 · 2분 전 · 380 kcal', caption: '오운완 · 점심 380 kcal', time: '2분 전'),
+  (
+    meta: '저녁 · 1시간 전 · 410 kcal',
+    caption: '단백질 채우기 성공 · 저녁 410 kcal',
+    time: '1시간 전',
+  ),
+];
 
 enum SocialView { crew, explore, feed }
 
@@ -29,9 +42,33 @@ class _SocialTabState extends State<SocialTab> {
   String? _created;
   String _description = '';
   String _query = '';
-  final _posts = <String>[];
+  // 내가 올린 게시물. 번호는 음수로 줄어들어 샘플·전체 피드 번호와 겹치지 않는다.
+  final _posts = <({int id, String caption})>[];
+  int _nextPostId = -1;
   final _members = [for (var i = 0; i < 4; i++) '프로필 이름'];
   final _requests = [false, false, false, false];
+  final _postStore = PostInteractionStore();
+
+  @override
+  void initState() {
+    super.initState();
+    // Figma 크루 피드의 두 번째 게시물(좋아요 7, 댓글 3).
+    _postStore.seed(
+      1,
+      likes: 7,
+      comments: const [
+        PostComment('프로필 이름', '단백질 챙기기 대단해요'),
+        PostComment('프로필 이름', '저도 따라 해볼래요'),
+        PostComment('프로필 이름', '내일도 같이 인증해요'),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _postStore.dispose();
+    super.dispose();
+  }
 
   bool get _inCrew => _created != null || _joined != null;
 
@@ -51,12 +88,16 @@ class _SocialTabState extends State<SocialTab> {
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
             child: Row(
               children: [
-                PopupMenuButton<SocialView>(
+                AppMenu<SocialView>(
                   tooltip: '소셜 화면 선택',
+                  offset: const Offset(-8, 0),
                   onSelected: _switch,
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: SocialView.crew, child: Text('크루')),
-                    PopupMenuItem(value: SocialView.feed, child: Text('전체')),
+                  selected: _view == SocialView.feed
+                      ? SocialView.feed
+                      : SocialView.crew,
+                  items: const [
+                    AppMenuItem(SocialView.feed, '전체'),
+                    AppMenuItem(SocialView.crew, '크루'),
                   ],
                   child: Row(
                     children: [
@@ -83,25 +124,23 @@ class _SocialTabState extends State<SocialTab> {
                 ] else ...[
                   const Spacer(),
                   if (_inCrew)
-                    PopupMenuButton<String>(
+                    AppMenu<String>(
                       tooltip: '크루 메뉴',
                       onSelected: _crewAction,
-                      itemBuilder: (_) => [
-                        const PopupMenuItem(
-                          value: 'members',
-                          child: Text('크루원 목록'),
-                        ),
-                        if (_created != null)
-                          const PopupMenuItem(
-                            value: 'requests',
-                            child: Text('신청 중인 크루원'),
-                          ),
-                        PopupMenuItem(
-                          value: 'leave',
-                          child: Text(_created == null ? '크루 탈퇴' : '크루 삭제'),
-                        ),
-                      ],
-                      icon: const Icon(Icons.more_horiz, color: _muted),
+                      width: _created == null ? 148 : 176,
+                      items: _created == null
+                          ? const [
+                              AppMenuItem('leave', '크루 탈퇴하기', danger: true),
+                            ]
+                          : const [
+                              AppMenuItem('requests', '신청 중인 크루원'),
+                              AppMenuItem('members', '크루원 목록'),
+                              AppMenuItem('leave', '크루 삭제', danger: true),
+                            ],
+                      child: const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Icon(Icons.more_horiz, color: _muted),
+                      ),
                     ),
                 ],
               ],
@@ -136,22 +175,28 @@ class _SocialTabState extends State<SocialTab> {
   );
 
   Widget _segment(String label, SocialView view) => Expanded(
-    child: Padding(
-      padding: const EdgeInsets.all(2),
-      child: Material(
-        color: _view == view ? Colors.white : Colors.transparent,
-        borderRadius: BorderRadius.circular(11),
-        child: InkWell(
+    child: Semantics(
+      button: true,
+      selected: _view == view,
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: Material(
+          color: _view == view ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(11),
-          onTap: () => _switch(view),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _view == view ? _ink : _muted,
-                fontWeight: _view == view ? FontWeight.bold : FontWeight.normal,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(11),
+            onTap: () => _switch(view),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _view == view ? _ink : _muted,
+                  fontWeight: _view == view
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                ),
               ),
             ),
           ),
@@ -298,9 +343,21 @@ class _SocialTabState extends State<SocialTab> {
         style: const TextStyle(color: _muted),
       ),
       const SizedBox(height: 10),
-      const Text(
-        '🔥 크루와 함께 연속 5일',
-        style: TextStyle(color: _muted, fontSize: 13),
+      Row(
+        children: [
+          ExcludeSemantics(
+            child: SvgPicture.asset(
+              'assets/images/social_flame.svg',
+              width: 12,
+              height: 17.5,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            '크루와 함께 연속 5일',
+            style: TextStyle(color: _muted, fontSize: 13),
+          ),
+        ],
       ),
       const SizedBox(height: 10),
       _button('오늘 식단 인증하기', _compose, icon: Icons.camera_alt_outlined),
@@ -365,29 +422,35 @@ class _SocialTabState extends State<SocialTab> {
         ],
       ),
       const SizedBox(height: 20),
-      for (final caption in _posts) ...[
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: _avatar(18),
-          title: const Text('내 게시물'),
-          subtitle: Text(caption),
+      // 내가 올린 게시물이 맨 위, 그다음 크루원 게시물.
+      for (final post in _posts) ...[
+        CrewPostCard(
+          postId: post.id,
+          photoIndex: -post.id % 15,
+          author: '나',
+          shortName: '나',
+          meta: '방금 · 크루 인증',
+          caption: post.caption,
+          time: '방금 전',
+          store: _postStore,
+          onOpen: () => _openPost(-post.id % 15, postId: post.id),
         ),
-        const Divider(),
+        const SizedBox(height: 28),
       ],
-      const ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: CircleAvatar(
-          backgroundColor: _tint,
-          child: Text('민지', style: TextStyle(fontSize: 12)),
+      for (final (i, post) in _crewSamples.indexed) ...[
+        CrewPostCard(
+          postId: i,
+          photoIndex: i,
+          author: '김민지',
+          shortName: '민지',
+          meta: post.meta,
+          caption: post.caption,
+          time: post.time,
+          store: _postStore,
+          onOpen: () => _openPost(i),
         ),
-        title: Text('김민지', style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('점심 · 2분 전 · 380 kcal', style: TextStyle(color: _muted)),
-        trailing: Icon(Icons.more_horiz, color: _muted),
-      ),
-      ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(onTap: () => _openPost(0), child: const _FoodTile(0)),
-      ),
+        const SizedBox(height: 28),
+      ],
     ],
   );
 
@@ -400,31 +463,36 @@ class _SocialTabState extends State<SocialTab> {
       mainAxisSpacing: 2,
     ),
     itemCount: '김민지 점심 식단'.contains(_query.trim()) ? 15 : 0,
-    itemBuilder: (_, index) =>
-        InkWell(onTap: () => _openPost(index), child: _FoodTile(index)),
+    itemBuilder: (_, index) => _tappableTile(index, () => _openPost(index)),
   );
 
-  void _openPost(int index) => Navigator.of(context).push<void>(
-    MaterialPageRoute(
-      builder: (_) => _SocialPage(
-        title: '게시물',
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            const ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('김민지'),
-              subtitle: Text('점심 · 2분 전 · 380 kcal'),
-            ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: _FoodTile(index),
-            ),
-          ],
+  // 이미지가 InkWell을 가리지 않도록 탭 영역을 이미지 위에 겹친다.
+  Widget _tappableTile(int index, VoidCallback onTap) => Stack(
+    children: [
+      _FoodTile(index),
+      Positioned.fill(
+        child: Semantics(
+          button: true,
+          label: '식단 게시물 보기',
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(onTap: onTap),
+          ),
         ),
       ),
-    ),
+    ],
   );
+
+  void _openPost(int photoIndex, {int? postId}) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => PostDetailScreen(
+            photoIndex: photoIndex,
+            postId: postId,
+            store: _postStore,
+          ),
+        ),
+      );
 
   Future<void> _create() async {
     final result = await Navigator.of(context)
@@ -443,30 +511,21 @@ class _SocialTabState extends State<SocialTab> {
     final caption = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const SocialComposeScreen()),
     );
-    if (caption != null && mounted) setState(() => _posts.insert(0, caption));
+    if (caption != null && mounted) {
+      setState(() => _posts.insert(0, (id: _nextPostId--, caption: caption)));
+    }
   }
 
   Future<void> _crewAction(String action) async {
     if (action == 'leave') {
       final label = _created == null ? '탈퇴' : '삭제';
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('크루 $label'),
-          content: Text('크루를 $label하시겠어요?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('취소'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(label),
-            ),
-          ],
-        ),
+      final confirmed = await showConfirmPopup(
+        context,
+        title: _created == null ? '크루를 탈퇴하시겠습니까?' : '크루를 삭제 하시겠습니까?',
+        message: _created == null ? null : '삭제할 경우 되돌릴 수 없습니다.',
+        confirmLabel: '$label하기',
       );
-      if (confirmed != true || !mounted) return;
+      if (!confirmed || !mounted) return;
       setState(() {
         _created = null;
         _joined = null;
@@ -517,7 +576,16 @@ class _SocialTabState extends State<SocialTab> {
                               style: TextStyle(color: Color(0xFFBD564D)),
                             ),
                             backgroundColor: const Color(0xFFFBEAE7),
-                            onPressed: () => update(() => _members.removeAt(i)),
+                            onPressed: () async {
+                              final confirmed = await showConfirmPopup(
+                                context,
+                                title: '크루원을 추방하시겠습니까?',
+                                confirmLabel: '추방하기',
+                              );
+                              if (confirmed && context.mounted) {
+                                update(() => _members.removeAt(i));
+                              }
+                            },
                           ),
                   ),
               ],
@@ -577,23 +645,22 @@ class _CreateCrewScreenState extends State<CreateCrewScreen> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('최대 인원'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  onPressed: _capacity > 2
-                      ? () => setState(() => _capacity--)
-                      : null,
-                  icon: const Icon(Icons.remove),
+            trailing: AppMenu<int>(
+              tooltip: '최대 인원',
+              width: 110,
+              selected: _capacity,
+              onSelected: (value) => setState(() => _capacity = value),
+              items: [for (var n = 3; n <= 6; n++) AppMenuItem(n, '$n명')],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('$_capacity명', style: const TextStyle(fontSize: 16)),
+                    const Icon(Icons.keyboard_arrow_down, color: _muted),
+                  ],
                 ),
-                Text('$_capacity명'),
-                IconButton(
-                  onPressed: _capacity < 20
-                      ? () => setState(() => _capacity++)
-                      : null,
-                  icon: const Icon(Icons.add),
-                ),
-              ],
+              ),
             ),
           ),
         ],
@@ -644,13 +711,26 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('공개 설정'),
-          trailing: DropdownButton<String>(
-            value: _visibility,
+          trailing: AppMenu<String>(
+            tooltip: '공개 설정',
+            width: 164,
+            selected: _visibility,
+            onSelected: (value) => setState(() => _visibility = value),
             items: const [
-              DropdownMenuItem(value: '공개', child: Text('공개')),
-              DropdownMenuItem(value: '크루만', child: Text('크루만')),
+              AppMenuItem('공개', '공개'),
+              AppMenuItem('비공개', '비공개'),
+              AppMenuItem('크루만 공개', '크루만 공개'),
             ],
-            onChanged: (value) => setState(() => _visibility = value!),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_visibility, style: const TextStyle(fontSize: 16)),
+                  const Icon(Icons.keyboard_arrow_down, color: _muted),
+                ],
+              ),
+            ),
           ),
         ),
         const Divider(),
