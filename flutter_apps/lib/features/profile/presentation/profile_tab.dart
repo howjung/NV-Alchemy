@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_overlays.dart';
 import 'profile_text.dart';
@@ -39,20 +40,27 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  String _name = '홍길동';
-  String _gender = '남성';
-  String _age = '25';
-  String _height = '175';
-  String _goal = '68';
-  String _calories = '2442';
-  String _activity = '보통 활동';
-  String _food = '밀키트 위주';
+  // 값은 앱 전체가 공유하는 userProfile에 있다(저장·복원).
+  String get _name => userProfile['name']!;
+  set _name(String v) => userProfile['name'] = v;
+  String get _gender => userProfile['gender']!;
+  set _gender(String v) => userProfile['gender'] = v;
+  String get _age => userProfile['age']!;
+  set _age(String v) => userProfile['age'] = v;
+  String get _height => userProfile['height']!;
+  set _height(String v) => userProfile['height'] = v;
+  String get _goal => userProfile['goal']!;
+  set _goal(String v) => userProfile['goal'] = v;
+  String get _calories => userProfile['calories']!;
+  set _calories(String v) => userProfile['calories'] = v;
+  String get _activity => userProfile['activity']!;
+  set _activity(String v) => userProfile['activity'] = v;
+  String get _food => userProfile['food']!;
+  set _food(String v) => userProfile['food'] = v;
   bool _monthly = false;
-  final _alerts = [true, true, true];
-  final _addresses = <List<String>>[
-    ['집', '홍길동', '010-1234-5678', '서울특별시 강남구 테헤란로 123', '101동 1001호'],
-  ];
-  final _cards = ['신한카드 ···· 1234'];
+  final _alerts = userAlerts;
+  final _addresses = userAddresses;
+  final _cards = userCards;
 
   void _open(ProfileView view) => Navigator.of(context).push<void>(
     MaterialPageRoute(
@@ -360,6 +368,7 @@ class _ProfileTabState extends State<ProfileTab> {
               onTap: () {
                 setState(() => _food = _foodStyles[index]);
                 refresh(() {});
+                saveUserData();
               },
             ),
         ]),
@@ -428,7 +437,10 @@ class _ProfileTabState extends State<ProfileTab> {
                 style: _small,
               ),
               value: _alerts[i],
-              onChanged: (value) => refresh(() => _alerts[i] = value),
+              onChanged: (value) {
+                refresh(() => _alerts[i] = value);
+                saveUserData();
+              },
             ),
         ]),
         const SizedBox(height: 10),
@@ -796,7 +808,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       title: const Center(
                         child: Text(
                           '배송지 삭제',
-                          style: TextStyle(color: Color(0xFFD9534F)),
+                          style: TextStyle(color: AppTheme.danger),
                         ),
                       ),
                       onTap: () async {
@@ -970,38 +982,40 @@ class _ProfileTabState extends State<ProfileTab> {
                     const TextSpan(text: '주문 · 결제 기록은 관계 법령에 따라 일정 기간 보관돼요.'),
                   ]),
                 ]),
-                // Figma에 있는 경고 줄. 구독 상태를 아직 모르므로 항상 보여 준다(임시).
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Text.rich(
-                    TextSpan(
-                      style: const TextStyle(
-                        color: Color(0xFFD9534F),
-                        fontSize: 13,
-                      ),
-                      children: [
-                        const TextSpan(text: '진행 중인 정기 구독이 있어요. 먼저 '),
-                        WidgetSpan(
-                          alignment: PlaceholderAlignment.baseline,
-                          baseline: TextBaseline.alphabetic,
-                          child: GestureDetector(
-                            onTap: () =>
-                                Navigator.pushNamed(context, AppRoutes.orders),
-                            child: const Text(
-                              '정기 구독을 해지',
-                              style: TextStyle(
-                                color: AppTheme.accent,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                if (hasSubscription)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: Text.rich(
+                      TextSpan(
+                        style: const TextStyle(
+                          color: AppTheme.danger,
+                          fontSize: 13,
+                        ),
+                        children: [
+                          const TextSpan(text: '진행 중인 정기 구독이 있어요. 먼저 '),
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.baseline,
+                            baseline: TextBaseline.alphabetic,
+                            child: GestureDetector(
+                              onTap: () => Navigator.pushNamed(
+                                context,
+                                AppRoutes.orders,
+                              ),
+                              child: const Text(
+                                '정기 구독을 해지',
+                                style: TextStyle(
+                                  color: AppTheme.accent,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const TextSpan(text: '해 주세요.'),
-                      ],
+                          const TextSpan(text: '해 주세요.'),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 _group('떠나시는 이유 (선택)', [
                   for (final item in [
                     '기록하기 번거로워요',
@@ -1053,7 +1067,9 @@ class _ProfileTabState extends State<ProfileTab> {
                               confirmLabel: '탈퇴하기',
                             ) &&
                             context.mounted) {
-                          // 서버 연결 전이라 계정은 지우지 않고 로그인 화면으로만 보낸다.
+                          // 서버 연결 전이라 기기에 저장된 내 정보만 지우고 로그인 화면으로 보낸다.
+                          resetUserData();
+                          saveUserData();
                           Navigator.pushNamedAndRemoveUntil(
                             context,
                             AppRoutes.login,
@@ -1062,7 +1078,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         }
                       }
                     : null,
-                color: const Color(0xFFD9534F),
+                color: AppTheme.danger,
               ),
             ),
           ),
@@ -1309,7 +1325,7 @@ Widget _field(
   String? hint,
   FormFieldValidator<String>? validator,
 }) => Padding(
-  padding: const EdgeInsets.all(10),
+  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
   child: TextFormField(
     initialValue: initial,
     obscureText: secret,
@@ -1317,10 +1333,23 @@ Widget _field(
     keyboardType: numeric
         ? const TextInputType.numberWithOptions(decimal: true)
         : null,
+    // Figma: 테두리 없이 작은 이름 아래에 값을 둔다. 입력 중에만 밑줄로 위치를 보여 준다.
     decoration: InputDecoration(
       labelText: label,
       hintText: hint,
-      floatingLabelBehavior: hint == null ? null : FloatingLabelBehavior.always,
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+      filled: false,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      errorBorder: InputBorder.none,
+      focusedBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: AppTheme.accent),
+      ),
+      focusedErrorBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: AppTheme.danger),
+      ),
     ),
     onChanged: change,
     validator:
@@ -1354,44 +1383,47 @@ Widget _inlineField(
   String? unit,
   bool numeric = false,
 }) => Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-  child: Row(
-    children: [
-      Text(label, style: const TextStyle(color: _green, fontSize: 16)),
-      Expanded(
-        child: TextFormField(
-          initialValue: initial,
-          textAlign: TextAlign.right,
-          keyboardType: numeric
-              ? const TextInputType.numberWithOptions(decimal: true)
-              : null,
-          style: const TextStyle(color: _green, fontSize: 16),
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            filled: false,
-            isDense: true,
+  padding: const EdgeInsets.symmetric(horizontal: 16),
+  child: ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 52),
+    child: Row(
+      children: [
+        Text(label, style: const TextStyle(color: _green, fontSize: 16)),
+        Expanded(
+          child: TextFormField(
+            initialValue: initial,
+            textAlign: TextAlign.right,
+            keyboardType: numeric
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : null,
+            style: const TextStyle(color: _green, fontSize: 16),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
+              isDense: true,
+            ),
+            onChanged: change,
+            validator: (value) {
+              final input = value?.trim() ?? '';
+              if (input.isEmpty) return '$label 항목을 입력해 주세요.';
+              if (numeric && !(double.tryParse(input)?.isFinite ?? false)) {
+                return '숫자를 입력해 주세요.';
+              }
+              return null;
+            },
           ),
-          onChanged: change,
-          validator: (value) {
-            final input = value?.trim() ?? '';
-            if (input.isEmpty) return '$label 항목을 입력해 주세요.';
-            if (numeric && !(double.tryParse(input)?.isFinite ?? false)) {
-              return '숫자를 입력해 주세요.';
-            }
-            return null;
-          },
         ),
-      ),
-      if (unit != null) ...[
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 36,
-          child: Text(unit, style: _small.copyWith(fontSize: 15)),
-        ),
+        if (unit != null) ...[
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 36),
+            child: Text(unit, style: _small.copyWith(fontSize: 15)),
+          ),
+        ],
       ],
-    ],
+    ),
   ),
 );
 

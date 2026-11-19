@@ -1,3 +1,4 @@
+import 'package:capstone/core/state/user_data.dart';
 import 'package:capstone/features/profile/presentation/profile_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,9 @@ Future<void> _open(WidgetTester tester, String row) async {
 }
 
 void main() {
+  // 배송지·카드·구독은 앱 전체가 공유하므로 테스트마다 처음 상태로 돌린다.
+  setUp(resetUserData);
+
   testWidgets('logout asks first and cancel keeps the screen', (tester) async {
     await _pump(tester);
     await _reveal(tester, find.widgetWithText(OutlinedButton, '로그아웃'));
@@ -119,7 +123,19 @@ void main() {
     expect(find.text('계정 관리'), findsWidgets);
   });
 
+  testWidgets(
+    'withdraw hides the subscription warning without a subscription',
+    (tester) async {
+      await _pump(tester);
+      await _open(tester, '계정 관리');
+      await tester.tap(find.text('회원 탈퇴'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('진행 중인 정기 구독이 있어요.'), findsNothing);
+    },
+  );
+
   testWidgets('withdraw asks for confirmation before leaving', (tester) async {
+    hasSubscription = true;
     await _pump(tester);
     await _open(tester, '계정 관리');
     await tester.tap(find.text('회원 탈퇴'));

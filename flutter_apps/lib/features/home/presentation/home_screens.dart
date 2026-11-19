@@ -11,6 +11,7 @@ import '../../records/presentation/records_tab.dart';
 
 import '../../../core/navigation/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_overlays.dart';
 import '../../../core/widgets/app_screen_frame.dart';
 import 'home_detail_screens.dart';
 import 'home_record_sheets.dart';
@@ -207,21 +208,7 @@ class _HomeTabState extends State<_HomeTab> {
     );
     if (!mounted || meal == null) return;
     widget.onMealSaved(meal);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: const Color(0xFF123229),
-          content: Row(
-            children: [
-              const Icon(Icons.water_drop, size: 16, color: Color(0xFF48B9C9)),
-              const SizedBox(width: 8),
-              Expanded(child: Text('${meal.type} 식단을 기록했어요')),
-            ],
-          ),
-        ),
-      );
+    showAppToast(context, '${meal.type} 식단을 기록했어요');
   }
 
   Future<void> _recordWeight() async {

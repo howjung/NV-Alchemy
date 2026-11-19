@@ -538,8 +538,7 @@ class _SocialTabState extends State<SocialTab> {
         _requests.fillRange(0, _requests.length, false);
         _view = SocialView.crew;
       });
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('크루를 $label했어요.')));
+      showAppToast(context, '크루를 $label했어요.');
       return;
     }
     final requests = action == 'requests';

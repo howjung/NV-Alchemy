@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/navigation/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
+import '../../../core/widgets/app_overlays.dart';
 import '../../../core/widgets/app_screen_frame.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -415,9 +416,7 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                   Center(
                     child: TextButton(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('메일을 다시 보냈어요.')),
-                        );
+                        showAppToast(context, '비밀번호 재설정 메일을 보냈어요');
                       },
                       child: const Text('메일이 오지 않았나요?  다시 보내기'),
                     ),

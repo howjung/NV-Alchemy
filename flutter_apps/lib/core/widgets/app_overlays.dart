@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-const _danger = Color(0xFFD9534F);
+const _danger = AppTheme.danger;
 const _soft = Color(0xFFEDF3EF);
 
 /// 확인 팝업 (Figma POP-01/02/05). 확인을 누르면 true, 그 외에는 false.
@@ -88,15 +88,17 @@ void showAppToast(BuildContext context, String message, {double bottom = 24}) {
     fontSize: 14,
     fontWeight: FontWeight.w500,
   );
+  // 앱 글꼴(테마)로 재야 실제 글자 폭과 같아 줄이 꺾이지 않는다.
+  final measured = Theme.of(context).textTheme.bodyMedium!.merge(style);
   final painter = TextPainter(
-    text: TextSpan(text: message, style: style),
+    text: TextSpan(text: message, style: measured),
     textDirection: TextDirection.ltr,
     textScaler: MediaQuery.textScalerOf(context),
   )..layout();
   final textWidth = painter.width;
   painter.dispose();
   // 창 폭이 아니라 이 화면이 실제로 차지하는 폭을 기준으로 가운데에 둔다.
-  final side = (((context.size?.width ?? 402) - textWidth - 40) / 2).clamp(
+  final side = (((context.size?.width ?? 402) - textWidth - 44) / 2).clamp(
     16.0,
     double.infinity,
   );

@@ -1,3 +1,4 @@
+import 'package:capstone/core/state/user_data.dart';
 import 'package:capstone/features/shopping/presentation/shopping_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +20,8 @@ Future<void> _openCart(WidgetTester tester) async {
 }
 
 void main() {
+  setUp(resetUserData);
+
   testWidgets('category and sort use the Figma dropdown menus', (tester) async {
     await _pump(tester);
 
@@ -174,12 +177,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('계좌이체'), findsOneWidget);
 
-    // 새 카드 등록은 선택해도 바뀌지 않는다(입력 항목 미확정).
+    // 새 카드 등록은 프로필의 결제 수단 화면을 열고, 추가한 카드가 선택된다.
     await tester.tap(find.byTooltip('결제 수단 선택'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('새 카드 등록'));
     await tester.pumpAndSettle();
-    expect(find.text('계좌이체'), findsOneWidget);
+    await tester.tap(find.text('추가'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).at(0), '국민카드');
+    await tester.enterText(find.byType(TextFormField).at(1), '4321');
+    await tester.tap(find.widgetWithText(FilledButton, '저장'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('프로필'));
+    await tester.pumpAndSettle();
+    expect(find.text('국민카드 ···· 4321'), findsOneWidget);
   });
 
   testWidgets('toast sits above the cart bar instead of covering it', (

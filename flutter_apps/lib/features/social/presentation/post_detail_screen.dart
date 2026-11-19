@@ -231,9 +231,7 @@ class PostActionRow extends StatelessWidget {
       ),
       onFlame: () {
         store.sendFlame(postId);
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('불꽃을 보냈어요.')));
+        showAppToast(context, '불꽃을 보냈어요.');
       },
     ),
   );

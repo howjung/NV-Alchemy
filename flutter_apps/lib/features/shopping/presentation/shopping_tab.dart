@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_overlays.dart';
+import '../../profile/presentation/profile_tab.dart';
 
 const _green = AppTheme.primary;
 const _muted = AppTheme.muted;
@@ -100,7 +102,8 @@ class _ShoppingTabState extends State<ShoppingTab> {
   int _quantity = 1;
   int _skips = 0;
   String _delivery = '문 앞에 놓아 주세요';
-  String _payment = '등록한 카드 ···· 1234';
+  var _address = 0;
+  String _payment = userCards.firstOrNull ?? '계좌이체';
 
   @override
   void didUpdateWidget(covariant ShoppingTab oldWidget) {
@@ -146,26 +149,33 @@ class _ShoppingTabState extends State<ShoppingTab> {
   }
 
   // 장바구니 바(담은 상품이 있을 때)를 가리지 않도록 그 위에 띄운다.
-  void _toast(String message, {double width = 160}) {
-    // 앱 화면 폭(창 폭이 아니라 이 탭이 실제로 차지하는 폭) 기준으로 가운데에 둔다.
-    final side = ((context.size?.width ?? 402) - width) / 2;
-    final bottom = _view == ShoppingView.catalog && _count > 0 ? 80.0 : 24.0;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-          ),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.fromLTRB(side, 0, side, bottom),
-          duration: const Duration(seconds: 2),
-          backgroundColor: _green,
-          shape: const StadiumBorder(),
-        ),
-      );
+  void _toast(String message) => showAppToast(
+    context,
+    message,
+    bottom: _view == ShoppingView.catalog && _count > 0 ? 80 : 24,
+  );
+
+  // 프로필의 추가 화면을 열고, 돌아오면 목록을 다시 보여 준다.
+  Future<void> _addCard() async {
+    final before = userCards.length;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => const ProfileTab(initialView: ProfileView.payment),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      if (userCards.length > before) _payment = userCards.last;
+    });
+  }
+
+  Future<void> _addAddress() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => const ProfileTab(initialView: ProfileView.address),
+      ),
+    );
+    if (mounted) setState(() {});
   }
 
   @override
@@ -730,21 +740,31 @@ class _ShoppingTabState extends State<ShoppingTab> {
       ),
       _section(
         '배송지',
-        AppMenu<String>(
+        AppMenu<int>(
           tooltip: '배송지 선택',
           width: 362,
-          selected: 'saved',
-          items: const [
-            AppMenuItem('saved', '홍길동 · 경기도 성남시 수정구 ○○로 123'),
-            AppMenuItem('new', '새 배송지 추가'),
+          selected: _address,
+          items: [
+            for (var i = 0; i < userAddresses.length; i++)
+              AppMenuItem(i, '${userAddresses[i][1]} · ${userAddresses[i][3]}'),
+            const AppMenuItem(-1, '새 배송지 추가'),
           ],
+          onSelected: (value) =>
+              value == -1 ? _addAddress() : setState(() => _address = value),
           child: _panel([
-            _pair('홍길동', '기본', strong: true),
-            const SizedBox(height: 6),
-            const Text(
-              '경기도 성남시 수정구 ○○로 123\n101동 1001호 · 010-0000-1234',
-              style: _caption,
-            ),
+            if (_address < userAddresses.length) ...[
+              _pair(
+                userAddresses[_address][1],
+                _address == 0 ? '기본' : '',
+                strong: true,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${userAddresses[_address][3]}\n${userAddresses[_address][4]} · ${userAddresses[_address][2]}',
+                style: _caption,
+              ),
+            ] else
+              const Text('배송지를 추가해 주세요', style: _caption),
           ]),
         ),
       ),
@@ -796,13 +816,12 @@ class _ShoppingTabState extends State<ShoppingTab> {
           width: 362,
           selected: _payment,
           items: [
-            for (final value in ['등록한 카드 ···· 1234', '새 카드 등록', '계좌이체'])
+            for (final value in [...userCards, '새 카드 등록', '계좌이체'])
               AppMenuItem(value, value),
           ],
-          // 새 카드 등록은 입력 항목이 정해지기 전(PRD N9)이라 선택만 닫는다.
-          onSelected: (value) {
-            if (value != '새 카드 등록') setState(() => _payment = value);
-          },
+          onSelected: (value) => value == '새 카드 등록'
+              ? _addCard()
+              : setState(() => _payment = value),
           child: _panel([_menuLabel(_payment)]),
         ),
       ),
@@ -1296,7 +1315,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
                   OutlinedButton(
                     onPressed: () {
                       update(() => skips++);
-                      _toast('다음 배송 1회를 건너뛰어요', width: 200);
+                      _toast('다음 배송 1회를 건너뛰어요');
                     },
                     child: Text('다음 배송 1회 건너뛰기 · $skips회'),
                   ),
@@ -1331,6 +1350,8 @@ class _ShoppingTabState extends State<ShoppingTab> {
     if (result == null || !mounted) return;
     setState(() {
       _subscription = result ? index : null;
+      hasSubscription = _subscription != null;
+      saveUserData();
       _cycle = cycle;
       _day = day;
       _quantity = quantity;
