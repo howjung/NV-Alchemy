@@ -249,6 +249,8 @@ void main() {
     await tester.tap(find.text('수비드 닭가슴살 샐러드'));
     await tester.pumpAndSettle();
     expect(find.text('주문 상세'), findsOneWidget);
+    // 결제 화면에서 고른 배송지가 그대로 남는다.
+    expect(find.textContaining('테헤란로 123'), findsOneWidget);
     expect(find.text('2026.10.21 주문 · 1개'), findsOneWidget);
     expect(find.text('배송 준비 중'), findsOneWidget);
     expect(find.text('도착 예정'), findsOneWidget);

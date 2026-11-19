@@ -87,7 +87,15 @@ class _ShoppingTabState extends State<ShoppingTab> {
   final _compared = <int>{};
   final _favorites = <int>{};
   final _orders =
-      <({Map<int, int> items, int total, int points, String payment})>[];
+      <
+        ({
+          Map<int, int> items,
+          int total,
+          int points,
+          String payment,
+          String address,
+        })
+      >[];
   late ShoppingView _view = widget.initialView;
   String _query = '';
   String _category = '전체 상품';
@@ -978,6 +986,10 @@ class _ShoppingTabState extends State<ShoppingTab> {
       total: _subtotal - _points,
       points: _points,
       payment: _payment,
+      // 주문한 때의 배송지를 그대로 남긴다(나중에 배송지를 고쳐도 바뀌지 않는다).
+      address: _address < userAddresses.length
+          ? '${userAddresses[_address][3]}\n${userAddresses[_address][4]} (${userAddresses[_address][1]})'
+          : '',
     ));
     _balance -= _points;
     _cart.clear();
@@ -1063,7 +1075,14 @@ class _ShoppingTabState extends State<ShoppingTab> {
 
   // 예시 주문일(앱의 기준 날짜)과 도착 예정일. 서버 연동 전 고정값.
   void _detail(
-    ({Map<int, int> items, int total, int points, String payment}) order,
+    ({
+      Map<int, int> items,
+      int total,
+      int points,
+      String payment,
+      String address,
+    })
+    order,
   ) => Navigator.of(context).push<void>(
     MaterialPageRoute(
       builder: (context) => Scaffold(
@@ -1117,10 +1136,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
             _timeline('10.22 (목)', '도착 예정'),
           ]),
           const SizedBox(height: 12),
-          _section(
-            '배송지',
-            _panel([const Text('경기도 성남시 수정구 ○○로 123\n101동 1001호 (홍길동)')]),
-          ),
+          _section('배송지', _panel([Text(order.address)])),
           _section(
             '결제 정보',
             _panel([
@@ -1187,7 +1203,14 @@ class _ShoppingTabState extends State<ShoppingTab> {
 
   Future<void> _cancelOrder(
     BuildContext detailContext,
-    ({Map<int, int> items, int total, int points, String payment}) order,
+    ({
+      Map<int, int> items,
+      int total,
+      int points,
+      String payment,
+      String address,
+    })
+    order,
   ) async {
     final confirmed = await showConfirmPopup(
       detailContext,
