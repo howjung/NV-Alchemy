@@ -1,3 +1,5 @@
+import 'package:capstone/core/state/user_data.dart';
+import 'package:capstone/features/social/presentation/post_detail_screen.dart';
 import 'package:capstone/features/social/presentation/social_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +16,11 @@ Future<void> _joinCrew(WidgetTester tester) async {
 }
 
 void main() {
+  setUp(() {
+    resetUserData();
+    resetPostStore();
+  });
+
   testWidgets('crew feed shows Instagram-style posts with actions', (
     tester,
   ) async {
@@ -21,7 +28,9 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: SocialTab())),
+      const MaterialApp(
+        home: Scaffold(body: SocialTab(initialView: SocialView.crew)),
+      ),
     );
     await _joinCrew(tester);
 
@@ -47,7 +56,9 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: SocialTab())),
+      const MaterialApp(
+        home: Scaffold(body: SocialTab(initialView: SocialView.crew)),
+      ),
     );
     await _joinCrew(tester);
 
@@ -70,7 +81,9 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: SocialTab())),
+      const MaterialApp(
+        home: Scaffold(body: SocialTab(initialView: SocialView.crew)),
+      ),
     );
     await _joinCrew(tester);
 

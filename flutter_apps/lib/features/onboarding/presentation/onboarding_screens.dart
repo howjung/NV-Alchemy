@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/state/input_rules.dart';
 import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
@@ -17,8 +18,15 @@ class ProfileOnboardingScreen extends StatefulWidget {
 }
 
 class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
+  final _nickname = TextEditingController();
   int _gender = 0;
   DateTime? _birthday;
+
+  @override
+  void dispose() {
+    _nickname.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickBirthday() async {
     final today = DateTime.now(); // 만 14~100세만 선택 가능(PRD N23)
@@ -115,7 +123,11 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
                   style: TextStyle(color: AppTheme.muted, fontSize: 14),
                 ),
                 const SizedBox(height: 26),
-                const LabeledField(label: '닉네임', hint: '사용할 닉네임'),
+                LabeledField(
+                  label: '닉네임',
+                  hint: '사용할 닉네임',
+                  controller: _nickname,
+                ),
                 const SizedBox(height: 18),
                 const Text(
                   '생년월일',
@@ -173,10 +185,27 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
                 const SizedBox(height: 16),
                 PrimaryButton(
                   label: '다음',
-                  onPressed: () => Navigator.pushNamed(
-                    context,
-                    AppRoutes.onboardingBodyGoal,
-                  ),
+                  onPressed: () {
+                    final birthday = _birthday;
+                    final error =
+                        nicknameError(_nickname.text) ??
+                        (birthday == null ? '생년월일을 선택해 주세요.' : null);
+                    if (error != null || birthday == null) {
+                      showAppToast(context, error!);
+                      return;
+                    }
+                    final now = DateTime.now();
+                    final hadBirthday =
+                        now.month > birthday.month ||
+                        (now.month == birthday.month &&
+                            now.day >= birthday.day);
+                    userProfile
+                      ..['name'] = _nickname.text.trim()
+                      ..['gender'] = _gender == 0 ? '남성' : '여성'
+                      ..['age'] =
+                          '${now.year - birthday.year - (hadBirthday ? 0 : 1)}';
+                    Navigator.pushNamed(context, AppRoutes.onboardingBodyGoal);
+                  },
                 ),
               ],
             ),
@@ -387,13 +416,12 @@ class _BodyGoalOnboardingScreenState extends State<BodyGoalOnboardingScreen> {
                 PrimaryButton(
                   label: '다음',
                   onPressed: () {
-                    final ok = [
-                      _height,
-                      _current,
-                      _goal,
-                    ].every((c) => (double.tryParse(c.text.trim()) ?? 0) > 0);
-                    if (!ok) {
-                      showAppToast(context, '키와 체중을 숫자로 입력해 주세요');
+                    final error =
+                        rangeError('키', _height.text, heightRange, 'cm') ??
+                        rangeError('현재 체중', _current.text, weightRange, 'kg') ??
+                        rangeError('목표 체중', _goal.text, weightRange, 'kg');
+                    if (error != null) {
+                      showAppToast(context, error);
                       return;
                     }
                     userProfile

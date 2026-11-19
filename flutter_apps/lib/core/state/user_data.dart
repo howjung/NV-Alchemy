@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'moderation.dart';
+import 'my_posts.dart';
+
 // 서버 연동 전, 프로필과 쇼핑이 함께 쓰는 사용자 데이터. 기기에 저장해 앱을 다시 켜도 유지한다.
 // 배송지는 [이름, 받는 분, 연락처, 주소, 상세 주소] 순서다.
 const _seedAddress = [
@@ -51,6 +54,8 @@ void resetUserData() {
     ..clear()
     ..addAll([true, true, true]);
   hasSubscription = false;
+  resetMyPosts();
+  resetModeration();
 }
 
 /// 앱 시작 때 저장된 값을 읽는다. 저장소를 못 쓰면 처음 값으로 시작한다.

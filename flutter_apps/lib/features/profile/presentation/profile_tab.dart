@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/state/input_rules.dart';
+import '../../../core/state/moderation.dart';
+import '../../../core/state/my_posts.dart';
 import '../../../core/state/body_metrics.dart';
 import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../social/presentation/post_detail_screen.dart';
 import '../../../core/widgets/app_overlays.dart';
 import 'profile_text.dart';
 
@@ -23,6 +27,7 @@ enum ProfileView {
   address,
   payment,
   alerts,
+  posts,
   blocked,
   notices,
   help,
@@ -122,6 +127,15 @@ class _ProfileTabState extends State<ProfileTab> {
                 () => Navigator.pushNamed(context, AppRoutes.points),
                 icon: Icons.account_balance_wallet_outlined,
                 value: '2,500P',
+              ),
+              ValueListenableBuilder<List<MyPost>>(
+                valueListenable: myPosts,
+                builder: (context, posts, _) => _row(
+                  '게시물 관리',
+                  () => _open(ProfileView.posts),
+                  icon: Icons.photo_library_outlined,
+                  value: posts.isEmpty ? null : '${posts.length}개',
+                ),
               ),
             ]),
             const SizedBox(height: 24),
@@ -465,12 +479,29 @@ class _ProfileTabState extends State<ProfileTab> {
         const Text('권한을 허용하면 앱을 닫아도 알림을 받을 수 있어요.', style: _small),
       ]),
       ProfileView.blocked => _page(context, '차단한 사용자', [
-        const SizedBox(height: 28),
-        _panel([
-          const Icon(Icons.group_outlined, color: _muted, size: 28),
-          const SizedBox(height: 8),
-          const Center(child: Text('차단한 사용자가 없어요.')),
-        ]),
+        const SizedBox(height: 12),
+        if (blockedUsers.value.isEmpty)
+          _panel([
+            const Icon(Icons.group_outlined, color: _muted, size: 28),
+            const SizedBox(height: 8),
+            const Center(child: Text('차단한 사용자가 없어요.')),
+          ])
+        else
+          _menu([
+            for (final name in blockedUsers.value)
+              ListTile(
+                leading: _avatar(18),
+                title: Text(name, style: const TextStyle(color: _green)),
+                trailing: TextButton(
+                  onPressed: () {
+                    unblockUser(name);
+                    refresh(() {});
+                    _toast(context, '$name님의 차단을 해제했어요');
+                  },
+                  child: const Text('해제'),
+                ),
+              ),
+          ]),
         const SizedBox(height: 12),
         const Center(
           child: Text('차단을 해제하면 그 사용자의 게시물과 댓글이 다시 보여요.', style: _small),
@@ -486,6 +517,7 @@ class _ProfileTabState extends State<ProfileTab> {
             ),
         ]),
       ]),
+      ProfileView.posts => _managePosts(context, refresh),
       ProfileView.help => _help(context),
       ProfileView.terms => _document(context, '서비스 이용약관', terms),
       ProfileView.privacy => _document(context, '개인정보 처리방침', privacy),
@@ -903,7 +935,12 @@ class _ProfileTabState extends State<ProfileTab> {
               '정보 수정',
               [
                 _group('프로필', [
-                  _inlineField('닉네임', fields[0], (value) => fields[0] = value),
+                  _inlineField(
+                    '닉네임',
+                    fields[0],
+                    (value) => fields[0] = value,
+                    check: nicknameError,
+                  ),
                 ]),
                 _group('신체 정보', [
                   Padding(
@@ -927,6 +964,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     (value) => fields[2] = value,
                     unit: 'cm',
                     numeric: true,
+                    check: (v) => rangeError('키', v, heightRange, 'cm'),
                   ),
                   _inlineField(
                     '목표 체중',
@@ -934,6 +972,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     (value) => fields[3] = value,
                     unit: 'kg',
                     numeric: true,
+                    check: (v) => rangeError('목표 체중', v, weightRange, 'kg'),
                   ),
                 ]),
                 _group('활동량', [
@@ -1334,6 +1373,103 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
+  // 프로필 · 게시물 관리: 내가 올린 게시물의 내용·공개 범위 수정과 삭제.
+  Widget _managePosts(BuildContext context, StateSetter refresh) {
+    final posts = myPosts.value;
+    return _page(context, '게시물 관리', [
+      if (posts.isEmpty)
+        _panel([
+          const Icon(Icons.photo_library_outlined, color: _muted, size: 28),
+          const SizedBox(height: 8),
+          const Center(child: Text('올린 게시물이 없어요.')),
+        ])
+      else
+        _menu([
+          for (final post in posts)
+            ListTile(
+              onTap: () => Navigator.of(context)
+                  .push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => PostDetailScreen(
+                        photoIndex: -post.id % 15,
+                        postId: post.id,
+                        caption: post.caption,
+                        time: '방금 전',
+                        store: postStore,
+                      ),
+                    ),
+                  )
+                  .then((_) => refresh(() {})),
+              title: Text(
+                post.caption,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _green, fontSize: 15),
+              ),
+              subtitle: Text(
+                '${post.meal} · ${post.visibility}${post.crew ? ' · 크루 인증' : ''}',
+                style: _small,
+              ),
+              trailing: AppMenu<String>(
+                tooltip: '게시물 메뉴',
+                width: 176,
+                onSelected: (action) =>
+                    _postAction(context, post, action, refresh),
+                items: [
+                  const AppMenuItem('edit', '내용 수정'),
+                  for (final v in ['공개', '비공개', if (inCrew.value) '크루만 공개'])
+                    if (v != post.visibility) AppMenuItem(v, '$v로 변경'),
+                  const AppMenuItem('delete', '삭제', danger: true),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(Icons.more_horiz, color: _muted),
+                ),
+              ),
+            ),
+        ]),
+      const SizedBox(height: 12),
+      const Center(child: Text('삭제한 게시물은 되돌릴 수 없어요.', style: _small)),
+    ]);
+  }
+
+  Future<void> _postAction(
+    BuildContext context,
+    MyPost post,
+    String action,
+    StateSetter refresh,
+  ) async {
+    switch (action) {
+      case 'delete':
+        final ok = await showConfirmPopup(
+          context,
+          title: '게시물을 삭제할까요?',
+          message: '삭제하면 되돌릴 수 없어요.',
+          confirmLabel: '삭제하기',
+        );
+        if (!ok || !context.mounted) return;
+        deleteMyPost(post.id);
+        refresh(() {});
+        _toast(context, '게시물을 삭제했어요');
+      case 'edit':
+        final text = await _editPostText(context, post.caption);
+        if (text == null || !context.mounted) return;
+        updateMyPost(post.id, caption: text);
+        refresh(() {});
+        _toast(context, '저장되었어요');
+      default: // 공개 범위 변경
+        updateMyPost(post.id, visibility: action);
+        refresh(() {});
+        _toast(context, '공개 설정을 "$action"(으)로 바꿨어요');
+    }
+  }
+
+  Future<String?> _editPostText(BuildContext context, String current) =>
+      showDialog<String>(
+        context: context,
+        builder: (_) => _PostTextDialog(initial: current),
+      );
+
   Widget _help(BuildContext context) {
     return _page(context, '고객센터', [
       _group('자주 묻는 질문', [
@@ -1694,6 +1830,7 @@ Widget _inlineField(
   ValueChanged<String> change, {
   String? unit,
   bool numeric = false,
+  String? Function(String input)? check,
 }) => Padding(
   padding: const EdgeInsets.symmetric(horizontal: 16),
   child: ConstrainedBox(
@@ -1723,7 +1860,7 @@ Widget _inlineField(
               if (numeric && !(double.tryParse(input)?.isFinite ?? false)) {
                 return '숫자를 입력해 주세요.';
               }
-              return null;
+              return check?.call(input);
             },
           ),
         ),
@@ -1888,3 +2025,47 @@ void _infoSheet(BuildContext context, String title, String sub, String body) =>
         ),
       ),
     );
+
+// 게시물 내용 수정 다이얼로그. 빈 내용은 저장할 수 없다.
+class _PostTextDialog extends StatefulWidget {
+  const _PostTextDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_PostTextDialog> createState() => _PostTextDialogState();
+}
+
+class _PostTextDialogState extends State<_PostTextDialog> {
+  late final _controller = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('내용 수정'),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      minLines: 3,
+      maxLines: 6,
+      onChanged: (_) => setState(() {}),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('취소'),
+      ),
+      TextButton(
+        onPressed: _controller.text.trim().isEmpty
+            ? null
+            : () => Navigator.pop(context, _controller.text.trim()),
+        child: const Text('저장'),
+      ),
+    ],
+  );
+}

@@ -36,7 +36,31 @@ void main() {
     await tester.ensureVisible(find.text('다음'));
     await tester.tap(find.text('다음'));
     await tester.pump();
-    expect(find.text('키와 체중을 숫자로 입력해 주세요'), findsOneWidget);
+    expect(find.text('숫자를 입력해 주세요.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('onboarding rejects out of range height', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: BodyGoalOnboardingScreen()),
+    );
+    await tester.enterText(find.byType(TextField).at(0), '99');
+    await tester.enterText(find.byType(TextField).at(1), '70');
+    await tester.enterText(find.byType(TextField).at(2), '65');
+    await tester.ensureVisible(find.text('다음'));
+    await tester.tap(find.text('다음'));
+    await tester.pump();
+    expect(find.text('키 범위는 100~250cm로 입력해 주세요.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('onboarding profile needs nickname and birthday', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ProfileOnboardingScreen()));
+    await tester.enterText(find.byType(TextField).at(0), 'a');
+    await tester.ensureVisible(find.text('다음'));
+    await tester.tap(find.text('다음'));
+    await tester.pump();
+    expect(find.text('닉네임은 2~12자로 입력해 주세요.'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   });
 }
