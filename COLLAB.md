@@ -1,6 +1,6 @@
 # 협업 안내 (COLLAB)
 
-Antifreeze Flutter 프론트엔드를 두 명 이상이 함께 작업하기 위한 규칙이다. **사람과 AI 에이전트 모두 작업을 시작하기 전에 이 파일과 `docs/프론트엔드_작업이력.md`를 읽는다.**
+Antifreeze Flutter 프론트엔드를 두 명 이상이 함께 작업하기 위한 규칙이다. **사람과 AI 에이전트 모두 작업을 시작하기 전에 이 파일, `docs/프론트엔드_작업이력.md`, `docs/이어하기.md`를 읽는다.**
 
 - 저장소: `howjung/NV-Alchemy` (앱 코드는 `flutter_apps/`)
 - 작업 브랜치: `feat/frontend-collab`
