@@ -11,9 +11,10 @@ import '../../records/presentation/records_tab.dart';
 
 import '../../../core/navigation/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/antifreeze_widgets.dart';
 import '../../../core/widgets/app_screen_frame.dart';
 import 'home_detail_screens.dart';
+import 'home_record_sheets.dart';
+import 'home_meal_sheet.dart';
 
 class HomeDashboardScreen extends StatelessWidget {
   const HomeDashboardScreen({super.key});
@@ -35,96 +36,225 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   late int _index = widget.initialIndex;
+  HomeMetrics _metrics = (height: 172, weight: 68.2, goal: 63);
+
+  static final _dashboardDate = DateTime(2026, 10, 21);
+  final _weights = <DateTime, double>{_dashboardDate: 68.2};
+
+  final _mealsByDate = <DateTime, Map<String, HomeMeal>>{
+    DateTime(2026, 10, 21): {
+      '아침': (type: '아침', values: ['그릭 요거트 & 사과', '320', '40', '18', '6']),
+      '점심': (type: '점심', values: ['현미곤약밥 & 소불고기', '620', '70', '35', '18']),
+    },
+  };
+
+  void _saveMeal(DateTime date, HomeMeal meal) {
+    setState(() => (_mealsByDate[date] ??= {})[meal.type] = meal);
+  }
+
+  void _updateHomeMetrics(HomeMetrics metrics) {
+    setState(() {
+      if (metrics.weight != _metrics.weight) {
+        _weights[_dashboardDate] = metrics.weight;
+      }
+      _metrics = metrics;
+    });
+  }
+
+  void _saveWeight(DateTime date, double weight) {
+    setState(() {
+      _weights[date] = weight;
+      _metrics = (height: _metrics.height, weight: weight, goal: _metrics.goal);
+    });
+  }
+
   bool _shoppingCatalog = true;
   int _profileOrderRequests = 0;
   bool _ordersFromProfile = false;
   @override
   Widget build(BuildContext context) => AppScreenFrame(
     figmaName: 'Antifreeze 메인',
-    child: Scaffold(
-      backgroundColor: Colors.white,
-      body: IndexedStack(
-        index: _index,
-        children: [
-          const _HomeTab(),
-          const RecordsTab(),
-          SocialTab(initialView: widget.initialSocialView),
-          ShoppingTab(
-            orderRequests: _profileOrderRequests,
-            onViewChanged: (view) => setState(() {
-              _shoppingCatalog = view == ShoppingView.catalog;
-              if (_shoppingCatalog && _ordersFromProfile) {
-                _index = 4;
-                _ordersFromProfile = false;
-              }
-            }),
-          ),
-          ProfileTab(
-            onOrders: () => setState(() {
-              _profileOrderRequests++;
-              _ordersFromProfile = true;
-              _shoppingCatalog = false;
-              _index = 3;
-            }),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _index == 3 && !_shoppingCatalog
-          ? null
-          : NavigationBar(
-              height: 72,
-              backgroundColor: Colors.white,
-              indicatorColor: const Color(0xFFE4F2F4),
-              selectedIndex: _index,
-              labelTextStyle: WidgetStateProperty.resolveWith(
-                (states) => TextStyle(
-                  fontSize: 11,
-                  fontWeight: states.contains(WidgetState.selected)
-                      ? FontWeight.w700
-                      : FontWeight.w400,
-                ),
-              ),
-              onDestinationSelected: (value) => setState(() => _index = value),
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home),
-                  label: '홈',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.calendar_month_outlined),
-                  selectedIcon: Icon(Icons.calendar_month),
-                  label: '기록',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.groups_outlined),
-                  selectedIcon: Icon(Icons.groups),
-                  label: '소셜',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.shopping_bag_outlined),
-                  selectedIcon: Icon(Icons.shopping_bag),
-                  label: '쇼핑',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.person_outline),
-                  selectedIcon: Icon(Icons.person),
-                  label: '프로필',
-                ),
-              ],
+    // Keep tab snackbars within the app frame.
+    child: ScaffoldMessenger(
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: IndexedStack(
+          index: _index,
+          children: [
+            _HomeTab(
+              metrics: _metrics,
+              onMetricsChanged: _updateHomeMetrics,
+              date: _dashboardDate,
+              meals: _mealsByDate[_dashboardDate] ?? const {},
+              onMealSaved: (meal) => _saveMeal(_dashboardDate, meal),
             ),
+            RecordsTab(
+              onOpenShop: () => setState(() => _index = 3),
+              weights: _weights,
+              onWeightSaved: _saveWeight,
+              mealsByDate: _mealsByDate,
+              onMealSaved: _saveMeal,
+            ),
+            SocialTab(initialView: widget.initialSocialView),
+            ShoppingTab(
+              orderRequests: _profileOrderRequests,
+              onViewChanged: (view) => setState(() {
+                _shoppingCatalog = view == ShoppingView.catalog;
+                if (_shoppingCatalog && _ordersFromProfile) {
+                  _index = 4;
+                  _ordersFromProfile = false;
+                }
+              }),
+            ),
+            ProfileTab(
+              onOrders: () => setState(() {
+                _profileOrderRequests++;
+                _ordersFromProfile = true;
+                _shoppingCatalog = false;
+                _index = 3;
+              }),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _index == 3 && !_shoppingCatalog
+            ? null
+            : NavigationBar(
+                height: 72,
+                backgroundColor: Colors.white,
+                indicatorColor: const Color(0xFFE4F2F4),
+                selectedIndex: _index,
+                labelTextStyle: WidgetStateProperty.resolveWith(
+                  (states) => TextStyle(
+                    fontSize: 11,
+                    fontWeight: states.contains(WidgetState.selected)
+                        ? FontWeight.w700
+                        : FontWeight.w400,
+                  ),
+                ),
+                onDestinationSelected: (value) =>
+                    setState(() => _index = value),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home),
+                    label: '홈',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.calendar_month_outlined),
+                    selectedIcon: Icon(Icons.calendar_month),
+                    label: '기록',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.groups_outlined),
+                    selectedIcon: Icon(Icons.groups),
+                    label: '소셜',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.shopping_bag_outlined),
+                    selectedIcon: Icon(Icons.shopping_bag),
+                    label: '쇼핑',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.person_outline),
+                    selectedIcon: Icon(Icons.person),
+                    label: '프로필',
+                  ),
+                ],
+              ),
+      ),
     ),
   );
 }
 
-class _HomeTab extends StatelessWidget {
-  const _HomeTab();
+class _HomeTab extends StatefulWidget {
+  const _HomeTab({
+    required this.metrics,
+    required this.onMetricsChanged,
+    required this.date,
+    required this.meals,
+    required this.onMealSaved,
+  });
+
+  final DateTime date;
+  final Map<String, HomeMeal> meals;
+  final ValueChanged<HomeMeal> onMealSaved;
+
+  final HomeMetrics metrics;
+  final ValueChanged<HomeMetrics> onMetricsChanged;
+
   @override
-  Widget build(BuildContext context) => const CustomScrollView(
+  State<_HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<_HomeTab> {
+  HomeMetrics get _metrics => widget.metrics;
+
+  Map<String, HomeMeal> get _meals => widget.meals;
+
+  Future<void> _recordMeal(String type) async {
+    final meal = await showHomeSheet<HomeMeal>(
+      context,
+      HomeMealSheet(initialType: type, meals: _meals, date: widget.date),
+    );
+    if (!mounted || meal == null) return;
+    widget.onMealSaved(meal);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF123229),
+          content: Row(
+            children: [
+              const Icon(Icons.water_drop, size: 16, color: Color(0xFF48B9C9)),
+              const SizedBox(width: 8),
+              Expanded(child: Text('${meal.type} 식단을 기록했어요')),
+            ],
+          ),
+        ),
+      );
+  }
+
+  Future<void> _recordWeight() async {
+    final weight = await showHomeSheet<double>(
+      context,
+      WeightRecordSheet(weight: _metrics.weight),
+    );
+    if (mounted && weight != null) {
+      widget.onMetricsChanged((
+        height: _metrics.height,
+        weight: weight,
+        goal: _metrics.goal,
+      ));
+    }
+  }
+
+  Future<void> _editInfo() async {
+    final metrics = await showHomeSheet<HomeMetrics>(
+      context,
+      HomeInfoSheet(metrics: _metrics),
+    );
+    if (mounted && metrics != null) widget.onMetricsChanged(metrics);
+  }
+
+  @override
+  Widget build(BuildContext context) => CustomScrollView(
     slivers: [
-      SliverToBoxAdapter(child: _HomeHero()),
-      SliverToBoxAdapter(child: _MealsSection()),
-      SliverToBoxAdapter(child: _DashboardDetails()),
+      const SliverToBoxAdapter(child: _HomeHero()),
+      SliverToBoxAdapter(
+        child: _MealsSection(
+          onRecordWeight: _recordWeight,
+          onRecordMeal: _recordMeal,
+          meals: _meals,
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: _DashboardDetails(
+          metrics: _metrics,
+          onEditInfo: _editInfo,
+          meals: _meals,
+        ),
+      ),
     ],
   );
 }
@@ -363,57 +493,78 @@ class _AiBadge extends StatelessWidget {
 }
 
 class _MealsSection extends StatelessWidget {
-  const _MealsSection();
+  const _MealsSection({
+    required this.onRecordWeight,
+    required this.onRecordMeal,
+    required this.meals,
+  });
+  final ValueChanged<String> onRecordMeal;
+  final Map<String, HomeMeal> meals;
+  final VoidCallback onRecordWeight;
   @override
   Widget build(BuildContext context) => Container(
     color: Colors.white,
     padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
     child: Column(
       children: [
-        const Row(
+        Row(
           children: [
-            Expanded(child: Text('오늘 식단 기록', style: _sectionTitle)),
-            Text('0 / 4끼', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Expanded(child: Text('오늘 식단 기록', style: _sectionTitle)),
+            Text(
+              '${meals.length} / 4끼',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ],
         ),
         const SizedBox(height: 14),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: ['아침', '점심', '저녁', '간식']
+          children: homeMealTypes
               .map(
-                (meal) => InkWell(
-                  onTap: () => _showMealSheet(context, meal),
-                  borderRadius: BorderRadius.circular(17),
-                  child: Container(
-                    width: 82,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0F5F3),
+                (meal) => Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: InkWell(
+                      onTap: () => onRecordMeal(meal),
                       borderRadius: BorderRadius.circular(17),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 25,
-                          height: 25,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFFC6DCD5)),
-                          ),
-                          child: const Icon(Icons.add, size: 17),
+                      child: Container(
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0F5F3),
+                          borderRadius: BorderRadius.circular(17),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          meal,
-                          style: const TextStyle(
-                            color: AppTheme.muted,
-                            fontSize: 12,
-                          ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 25,
+                              height: 25,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFFC6DCD5),
+                                ),
+                              ),
+                              child: Icon(
+                                meals.containsKey(meal)
+                                    ? Icons.check
+                                    : Icons.add,
+                                size: 17,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              meal,
+                              style: const TextStyle(
+                                color: AppTheme.muted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -421,98 +572,65 @@ class _MealsSection extends StatelessWidget {
               .toList(),
         ),
         const SizedBox(height: 12),
-        Container(
-          height: 46,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF0F5F3),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.water_drop, color: Color(0xFF48B9C9), size: 17),
-              SizedBox(width: 12),
-              Expanded(child: Text('체중')),
-              Text('기록하기 ›', style: TextStyle(fontWeight: FontWeight.w700)),
-            ],
+        InkWell(
+          onTap: onRecordWeight,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: 46,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F5F3),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.water_drop, color: Color(0xFF48B9C9), size: 17),
+                SizedBox(width: 12),
+                Expanded(child: Text('체중')),
+                Text('기록하기 ›', style: TextStyle(fontWeight: FontWeight.w700)),
+              ],
+            ),
           ),
         ),
       ],
     ),
   );
-
-  static void _showMealSheet(BuildContext context, String meal) =>
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        builder: (context) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            18,
-            20,
-            MediaQuery.viewInsetsOf(context).bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: AppTheme.border,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text('$meal 식단 기록', style: _sectionTitle),
-              const SizedBox(height: 18),
-              const LabeledField(label: '먹은 음식', hint: '음식 이름을 입력해 주세요'),
-              const SizedBox(height: 14),
-              const LabeledField(
-                label: '칼로리',
-                hint: '0 kcal',
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 20),
-              PrimaryButton(
-                label: '기록하기',
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-        ),
-      );
 }
 
 class _DashboardDetails extends StatelessWidget {
-  const _DashboardDetails();
+  const _DashboardDetails({
+    required this.metrics,
+    required this.onEditInfo,
+    required this.meals,
+  });
+  final Map<String, HomeMeal> meals;
+  int _total(int index) => meals.values.fold(
+    0,
+    (sum, meal) => sum + (int.tryParse(meal.values[index]) ?? 0),
+  );
+  final HomeMetrics metrics;
+  final VoidCallback onEditInfo;
   @override
   Widget build(BuildContext context) => Container(
     color: Colors.white,
     padding: const EdgeInsets.fromLTRB(15, 8, 15, 34),
-    child: const Column(
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Expanded(child: Text('남은 칼로리', style: _sectionTitle)),
-            Text('내 정보 ›', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Expanded(child: Text('남은 칼로리', style: _sectionTitle)),
+            TextButton(onPressed: onEditInfo, child: const Text('내 정보 ›')),
           ],
         ),
-        SizedBox(height: 17),
+        const SizedBox(height: 17),
         Row(
           children: [
             SizedBox(
               width: 70,
               height: 70,
               child: CircularProgressIndicator(
-                value: 0,
+                value: (_total(1) / 2442).clamp(0.0, 1.0),
                 strokeWidth: 8,
                 backgroundColor: Color(0xFFDDE9E5),
               ),
@@ -524,7 +642,11 @@ class _DashboardDetails extends StatelessWidget {
                 Text.rich(
                   TextSpan(
                     children: [
-                      TextSpan(text: '2,442', style: TextStyle(fontSize: 30)),
+                      TextSpan(
+                        text: MaterialLocalizations.of(context)
+                            .formatDecimal((2442 - _total(1)).clamp(0, 2442)),
+                        style: const TextStyle(fontSize: 30),
+                      ),
                       TextSpan(
                         text: '  kcal',
                         style: TextStyle(fontSize: 14, color: AppTheme.muted),
@@ -537,7 +659,7 @@ class _DashboardDetails extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '섭취 0 · 목표 2,442 kcal',
+                  '섭취  · 목표 2,442 kcal',
                   style: TextStyle(color: AppTheme.muted, fontSize: 12),
                 ),
               ],
@@ -548,15 +670,27 @@ class _DashboardDetails extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _Macro(label: '탄수화물', value: '0 / 256g'),
+              child: _Macro(
+                label: '탄수화물',
+                value: ' / 256g',
+                progress: (_total(2) / 256).clamp(0.0, 1.0),
+              ),
             ),
             SizedBox(width: 14),
             Expanded(
-              child: _Macro(label: '단백질', value: '0 / 128g'),
+              child: _Macro(
+                label: '단백질',
+                value: ' / 128g',
+                progress: (_total(3) / 128).clamp(0.0, 1.0),
+              ),
             ),
             SizedBox(width: 14),
             Expanded(
-              child: _Macro(label: '지방', value: '0 / 64g'),
+              child: _Macro(
+                label: '지방',
+                value: ' / 64g',
+                progress: (_total(4) / 64).clamp(0.0, 1.0),
+              ),
             ),
           ],
         ),
@@ -564,15 +698,27 @@ class _DashboardDetails extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _MetricBox(label: '키', value: '172', unit: 'cm'),
+              child: _MetricBox(
+                label: '키',
+                value: formatMetric(metrics.height),
+                unit: 'cm',
+              ),
             ),
             SizedBox(width: 8),
             Expanded(
-              child: _MetricBox(label: '현재 체중', value: '68.2', unit: 'kg'),
+              child: _MetricBox(
+                label: '현재 체중',
+                value: formatMetric(metrics.weight),
+                unit: 'kg',
+              ),
             ),
             SizedBox(width: 8),
             Expanded(
-              child: _MetricBox(label: '목표', value: '63', unit: 'kg'),
+              child: _MetricBox(
+                label: '목표',
+                value: formatMetric(metrics.goal),
+                unit: 'kg',
+              ),
             ),
           ],
         ),
@@ -604,7 +750,7 @@ class _DashboardDetails extends StatelessWidget {
           children: [
             Expanded(child: Text('체중 변화', style: _sectionTitle)),
             Text(
-              '목표까지 -5.2kg',
+              '목표까지 ${formatMetric(metrics.goal - metrics.weight)}kg',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
             ),
           ],
@@ -621,7 +767,12 @@ class _DashboardDetails extends StatelessWidget {
 }
 
 class _Macro extends StatelessWidget {
-  const _Macro({required this.label, required this.value});
+  const _Macro({
+    required this.label,
+    required this.value,
+    required this.progress,
+  });
+  final double progress;
   final String label;
   final String value;
   @override
@@ -638,12 +789,12 @@ class _Macro extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 9),
-      Container(
-        height: 5,
-        decoration: BoxDecoration(
-          color: const Color(0xFFDDE9E5),
-          borderRadius: BorderRadius.circular(3),
-        ),
+      LinearProgressIndicator(
+        value: progress,
+        minHeight: 5,
+        borderRadius: BorderRadius.circular(3),
+        color: AppTheme.accent,
+        backgroundColor: const Color(0xFFDDE9E5),
       ),
     ],
   );

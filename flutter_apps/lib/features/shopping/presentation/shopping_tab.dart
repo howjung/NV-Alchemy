@@ -606,6 +606,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
                 child: Text('문 앞에 놓아 주세요'),
               ),
               DropdownMenuItem(value: '직접 받을게요', child: Text('직접 받을게요')),
+              DropdownMenuItem(value: '기타', child: Text('기타')),
             ],
             onChanged: (value) => setState(() => _delivery = value!),
           ),
