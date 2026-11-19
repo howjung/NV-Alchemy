@@ -124,7 +124,27 @@ void main() {
     await _open(tester, '계정 관리');
     await tester.tap(find.text('회원 탈퇴'));
     await tester.pumpAndSettle();
+    // Figma 안내 4줄, 구독 경고, 이유 5개
+    expect(find.textContaining('프로필 정보가 모두 삭제되고'), findsOneWidget);
+    expect(find.textContaining('보유 포인트 2,500P가 소멸해요.'), findsOneWidget);
+    expect(find.textContaining("'탈퇴한 회원'으로 표시돼요"), findsOneWidget);
+    expect(find.textContaining('관계 법령에 따라'), findsOneWidget);
+    expect(find.textContaining('진행 중인 정기 구독이 있어요.'), findsOneWidget);
+    expect(find.text('정기 구독을 해지'), findsOneWidget);
+    expect(find.text('기록하기 번거로워요'), findsOneWidget);
+    // 동의 전에는 탈퇴하기가 눌리지 않는다.
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '탈퇴하기'))
+          .onPressed,
+      isNull,
+    );
+    await tester.tap(find.text('원하는 상품이 없어요'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check), findsOneWidget);
     await tester.tap(find.byType(CheckboxListTile));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -600));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).last, 'pass1234');
     await tester.tap(find.widgetWithText(FilledButton, '탈퇴하기'));
@@ -161,5 +181,81 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.widgetWithText(FilledButton, '확인'), findsOneWidget);
+  });
+
+  testWidgets('profile edit uses inline rows, check marks and a top Save', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await _open(tester, '프로필 · 신체 지표');
+    await _reveal(tester, find.text('정보 수정'));
+    await tester.tap(find.text('정보 수정'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('세'), findsOneWidget);
+    expect(find.text('cm'), findsOneWidget);
+    expect(find.text('kg'), findsOneWidget);
+    expect(find.text('kcal'), findsOneWidget);
+    expect(find.text('운동을 거의 하지 않아요'), findsOneWidget);
+    expect(find.textContaining('자동 계산돼요'), findsOneWidget);
+    // 활동량 선택은 체크 표시 하나, 아래쪽 저장 버튼은 없고 오른쪽 위에 있다.
+    expect(find.byIcon(Icons.check), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '저장'), findsNothing);
+
+    await tester.tap(find.text('활동적'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, '저장'));
+    await tester.pumpAndSettle();
+    expect(find.text('저장되었어요'), findsOneWidget);
+  });
+
+  testWidgets(
+    'AI setting, alert permission row and payment note follow Figma',
+    (tester) async {
+      await _pump(tester);
+      await _open(tester, 'AI 추천 설정');
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(find.byIcon(Icons.radio_button_checked), findsNothing);
+      await tester.tap(find.text('혼합'));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.check), findsOneWidget);
+
+      await tester.tap(find.text('프로필'));
+      await tester.pumpAndSettle();
+      await _open(tester, '알림 설정');
+      expect(find.byIcon(Icons.notifications_none), findsOneWidget);
+      expect(find.text('허용 필요'), findsOneWidget);
+
+      await tester.tap(find.text('프로필'));
+      await tester.pumpAndSettle();
+      await _open(tester, '결제 수단');
+      expect(find.textContaining('결제 대행사(PG)'), findsOneWidget);
+      expect(find.text('기본'), findsOneWidget);
+    },
+  );
+
+  testWidgets('password fields show hints; address edit saves from the top', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await _open(tester, '계정 관리');
+    await tester.tap(find.text('비밀번호 변경'));
+    await tester.pumpAndSettle();
+    expect(find.text('영문, 숫자 포함 8자 이상'), findsOneWidget);
+    expect(find.text('한 번 더 입력'), findsOneWidget);
+
+    await tester.tap(find.text('계정 관리'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('프로필'));
+    await tester.pumpAndSettle();
+    await _open(tester, '배송지 관리');
+    await tester.tap(find.textContaining('집 · 기본'));
+    await tester.pumpAndSettle();
+    expect(find.text('기본 배송지로 설정'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '저장'), findsNothing);
+    await tester.tap(find.widgetWithText(TextButton, '저장'));
+    await tester.pumpAndSettle();
+    expect(find.text('저장되었어요'), findsOneWidget);
   });
 }

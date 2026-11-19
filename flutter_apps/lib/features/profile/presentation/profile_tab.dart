@@ -356,12 +356,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 ['도시락 · 샐러드처럼 바로 먹는 식단', '간단히 조리하는 식단', '완제품과 밀키트를 함께'][index],
                 style: _small,
               ),
-              trailing: Icon(
-                _food == _foodStyles[index]
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                color: AppTheme.accent,
-              ),
+              trailing: _food == _foodStyles[index] ? _checkMark : null,
               onTap: () {
                 setState(() => _food = _foodStyles[index]);
                 refresh(() {});
@@ -384,49 +379,45 @@ class _ProfileTabState extends State<ProfileTab> {
         const SizedBox(height: 10),
         const Text('탈퇴하면 기록과 포인트가 모두 삭제되고 되돌릴 수 없어요.', style: _small),
       ]),
-      ProfileView.address => _page(
-        context,
-        '배송지 관리',
-        [
-          if (_addresses.isEmpty) _panel([const Text('등록한 배송지가 없어요.')]),
-          for (var i = 0; i < _addresses.length; i++) ...[
-            _menu([
-              _row(
-                '${_addresses[i][0]}${i == 0 ? ' · 기본' : ''}',
-                () => _editAddress(context, refresh, i),
-                subtitle:
-                    '${_addresses[i][3]} ${_addresses[i][4]}\n${_addresses[i][1]} · ${_addresses[i][2]}',
-              ),
-            ]),
-            const SizedBox(height: 10),
-          ],
-        ],
-        trailing: TextButton(
-          onPressed: () => _editAddress(context, refresh, null),
-          child: const Text('추가'),
-        ),
-      ),
-      ProfileView.payment => _page(
-        context,
-        '결제 수단',
-        [
+      ProfileView.address => _page(context, '배송지 관리', [
+        if (_addresses.isEmpty) _panel([const Text('등록한 배송지가 없어요.')]),
+        for (var i = 0; i < _addresses.length; i++) ...[
           _menu([
-            for (var i = 0; i < _cards.length; i++)
-              ListTile(
-                leading: const Icon(Icons.credit_card),
-                title: Text(_cards[i]),
-                trailing: i == 0 ? const Text('기본', style: _small) : null,
-              ),
-            if (_cards.isEmpty) const ListTile(title: Text('등록한 결제 수단이 없어요.')),
+            _row(
+              '${_addresses[i][0]}${i == 0 ? ' · 기본' : ''}',
+              () => _editAddress(context, refresh, i),
+              subtitle:
+                  '${_addresses[i][3]} ${_addresses[i][4]}\n${_addresses[i][1]} · ${_addresses[i][2]}',
+            ),
           ]),
-          const SizedBox(height: 14),
-          const Text('프로토타입에서는 카드사와 끝 4자리만 저장해요.', style: _small),
+          const SizedBox(height: 10),
         ],
-        trailing: TextButton(
-          onPressed: () => _addCard(context, refresh),
-          child: const Text('추가'),
+      ], trailing: _topAction('추가', () => _editAddress(context, refresh, null))),
+      ProfileView.payment => _page(context, '결제 수단', [
+        _menu([
+          for (var i = 0; i < _cards.length; i++)
+            ListTile(
+              leading: const Icon(Icons.credit_card, color: _green),
+              title: Text(_cards[i]),
+              trailing: i == 0
+                  ? const Text(
+                      '기본',
+                      style: TextStyle(
+                        color: AppTheme.accent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+          if (_cards.isEmpty) const ListTile(title: Text('등록한 결제 수단이 없어요.')),
+        ]),
+        const SizedBox(height: 14),
+        const Text(
+          '프로토타입에서는 카드사와 끝 4자리만 저장해요. 실제 앱에서는 결제 대행사(PG) 결제창에서 카드 정보를 입력하고, 앱에는 카드 번호를 저장하지 않아요.',
+          style: _small,
         ),
-      ),
+      ], trailing: _topAction('추가', () => _addCard(context, refresh))),
       ProfileView.alerts => _page(context, '알림 설정', [
         _menu([
           for (var i = 0; i < _alerts.length; i++)
@@ -444,8 +435,15 @@ class _ProfileTabState extends State<ProfileTab> {
         const Text('끈 알림은 알림함에도 쌓이지 않아요.', style: _small),
         _group('기기 알림', [
           ListTile(
+            leading: const Icon(Icons.notifications_none, color: _green),
             title: const Text('기기 알림 권한'),
-            trailing: const Text('허용 필요', style: _small),
+            trailing: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('허용 필요', style: _small),
+                Icon(Icons.chevron_right, size: 20, color: _muted),
+              ],
+            ),
             onTap: () => _toast(context, '기기 설정에서 알림을 허용해 주세요'),
           ),
         ]),
@@ -654,7 +652,7 @@ class _ProfileTabState extends State<ProfileTab> {
               '정보 수정',
               [
                 _group('프로필', [
-                  _field('닉네임', fields[0], (value) => fields[0] = value),
+                  _inlineField('닉네임', fields[0], (value) => fields[0] = value),
                 ]),
                 _group('신체 정보', [
                   Padding(
@@ -665,38 +663,64 @@ class _ProfileTabState extends State<ProfileTab> {
                       (value) => update(() => gender = value),
                     ),
                   ),
-                  for (var i = 1; i <= 3; i++)
-                    _field(
-                      ['', '나이', '키', '목표 체중'][i],
-                      fields[i],
-                      (value) => fields[i] = value,
-                      numeric: true,
-                    ),
+                  _inlineField(
+                    '나이',
+                    fields[1],
+                    (value) => fields[1] = value,
+                    unit: '세',
+                    numeric: true,
+                  ),
+                  _inlineField(
+                    '키',
+                    fields[2],
+                    (value) => fields[2] = value,
+                    unit: 'cm',
+                    numeric: true,
+                  ),
+                  _inlineField(
+                    '목표 체중',
+                    fields[3],
+                    (value) => fields[3] = value,
+                    unit: 'kg',
+                    numeric: true,
+                  ),
                 ]),
                 _group('활동량', [
-                  for (final item in ['비활동적', '보통 활동', '활동적'])
+                  for (final (item, hint) in [
+                    ('비활동적', '운동을 거의 하지 않아요'),
+                    ('보통 활동', '주 1~3회 가볍게 움직여요'),
+                    ('활동적', '주 4~5회 꾸준히 움직여요'),
+                  ])
                     ListTile(
-                      title: Text(item),
-                      trailing: Icon(
-                        activity == item
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
-                        color: AppTheme.accent,
+                      title: Text(
+                        item,
+                        style: const TextStyle(color: _green, fontSize: 16),
                       ),
+                      subtitle: Text(hint, style: _small),
+                      selected: activity == item,
+                      trailing: activity == item ? _checkMark : null,
                       onTap: () => update(() => activity = item),
                     ),
                 ]),
                 _group('목표 칼로리', [
-                  _field(
+                  _inlineField(
                     '하루 목표',
                     fields[4],
                     (value) => fields[4] = value,
+                    unit: 'kcal',
                     numeric: true,
                   ),
                 ]),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
+                  child: Text(
+                    '현재 체중 74kg 기준으로 활동량을 바꾸면 자동 계산돼요. 직접 고칠 수도 있어요.',
+                    style: _small,
+                  ),
+                ),
               ],
               back: '프로필',
-              action: _action('저장', () {
+              trailing: _topAction('저장', () {
                 if (form.currentState!.validate()) Navigator.pop(context, true);
               }),
             ),
@@ -757,29 +781,41 @@ class _ProfileTabState extends State<ProfileTab> {
                 ]),
                 const SizedBox(height: 10),
                 const Text('실제 앱에서는 주소 검색으로 도로명 주소를 입력해요.', style: _small),
-                SwitchListTile(
-                  title: const Text('기본 배송지로 설정'),
-                  value: makeDefault,
-                  onChanged: (value) => update(() => makeDefault = value),
-                ),
-                if (index != null)
-                  TextButton(
-                    onPressed: () async {
-                      if (await showConfirmPopup(
-                            context,
-                            title: '배송지를 삭제할까요?',
-                            message: '삭제한 배송지는 되돌릴 수 없어요.',
-                            confirmLabel: '삭제하기',
-                          ) &&
-                          context.mounted) {
-                        Navigator.pop(context, 'delete');
-                      }
-                    },
-                    child: const Text('배송지 삭제'),
+                const SizedBox(height: 16),
+                _menu([
+                  SwitchListTile(
+                    title: const Text('기본 배송지로 설정'),
+                    value: makeDefault,
+                    onChanged: (value) => update(() => makeDefault = value),
                   ),
+                ]),
+                if (index != null) ...[
+                  const SizedBox(height: 16),
+                  _menu([
+                    ListTile(
+                      title: const Center(
+                        child: Text(
+                          '배송지 삭제',
+                          style: TextStyle(color: Color(0xFFD9534F)),
+                        ),
+                      ),
+                      onTap: () async {
+                        if (await showConfirmPopup(
+                              context,
+                              title: '배송지를 삭제할까요?',
+                              message: '삭제한 배송지는 되돌릴 수 없어요.',
+                              confirmLabel: '삭제하기',
+                            ) &&
+                            context.mounted) {
+                          Navigator.pop(context, 'delete');
+                        }
+                      },
+                    ),
+                  ]),
+                ],
               ],
               back: '배송지',
-              action: _action('저장', () {
+              trailing: _topAction('저장', () {
                 if (form.currentState!.validate()) {
                   Navigator.pop(context, 'save');
                 }
@@ -859,12 +895,13 @@ class _ProfileTabState extends State<ProfileTab> {
           key: form,
           child: _page(context, '비밀번호 변경', [
             _menu([
-              _field('현재 비밀번호', '', (_) {}, secret: true),
+              _field('현재 비밀번호', '', (_) {}, secret: true, hint: '현재 비밀번호'),
               _field(
                 '새 비밀번호',
                 '',
                 (value) => password = value,
                 secret: true,
+                hint: '영문, 숫자 포함 8자 이상',
                 validator: (value) =>
                     RegExp(r'^(?=.*[A-Za-z])(?=.*\d).{8,}$')
                         .hasMatch(value ?? '')
@@ -876,6 +913,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 '',
                 (_) {},
                 secret: true,
+                hint: '한 번 더 입력',
                 validator: (value) =>
                     value == password ? null : '새 비밀번호가 일치하지 않아요.',
               ),
@@ -911,14 +949,59 @@ class _ProfileTabState extends State<ProfileTab> {
               [
                 Text(
                   '$_name님, 탈퇴하기 전에\n꼭 확인해 주세요',
-                  style: _strong.copyWith(fontSize: 22),
+                  style: _strong.copyWith(fontSize: 20, height: 1.4),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 _panel([
-                  const Text(
-                    '식단·체중 기록과 포인트가 삭제되고 복구할 수 없어요. 진행 중인 정기 구독은 먼저 해지해 주세요.',
-                  ),
+                  _bullet([
+                    const TextSpan(text: '식단 · 체중 기록과 프로필 정보가 '),
+                    TextSpan(text: '모두 삭제', style: _strong),
+                    const TextSpan(text: '되고 복구할 수 없어요.'),
+                  ]),
+                  _bullet([
+                    const TextSpan(text: '보유 포인트 '),
+                    TextSpan(text: '2,500P', style: _strong),
+                    const TextSpan(text: '가 소멸해요.'),
+                  ]),
+                  _bullet([
+                    const TextSpan(text: "크루 피드의 게시물은 '탈퇴한 회원'으로 표시돼요."),
+                  ]),
+                  _bullet([
+                    const TextSpan(text: '주문 · 결제 기록은 관계 법령에 따라 일정 기간 보관돼요.'),
+                  ]),
                 ]),
+                // Figma에 있는 경고 줄. 구독 상태를 아직 모르므로 항상 보여 준다(임시).
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Text.rich(
+                    TextSpan(
+                      style: const TextStyle(
+                        color: Color(0xFFD9534F),
+                        fontSize: 13,
+                      ),
+                      children: [
+                        const TextSpan(text: '진행 중인 정기 구독이 있어요. 먼저 '),
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.baseline,
+                          baseline: TextBaseline.alphabetic,
+                          child: GestureDetector(
+                            onTap: () =>
+                                Navigator.pushNamed(context, AppRoutes.orders),
+                            child: const Text(
+                              '정기 구독을 해지',
+                              style: TextStyle(
+                                color: AppTheme.accent,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const TextSpan(text: '해 주세요.'),
+                      ],
+                    ),
+                  ),
+                ),
                 _group('떠나시는 이유 (선택)', [
                   for (final item in [
                     '기록하기 번거로워요',
@@ -928,23 +1011,34 @@ class _ProfileTabState extends State<ProfileTab> {
                     '기타',
                   ])
                     ListTile(
-                      title: Text(item),
-                      trailing: Icon(
-                        reason == item
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
+                      minTileHeight: 52,
+                      title: Text(
+                        item,
+                        style: const TextStyle(color: _green, fontSize: 16),
                       ),
+                      selected: reason == item,
+                      trailing: reason == item ? _checkMark : null,
                       onTap: () =>
                           update(() => reason = reason == item ? null : item),
                     ),
                 ]),
-                CheckboxListTile(
-                  value: acknowledged,
-                  title: const Text('안내 사항을 모두 확인했어요'),
-                  onChanged: (value) =>
-                      update(() => acknowledged = value ?? false),
-                ),
-                _field('비밀번호 확인', '', (_) {}, secret: true),
+                const SizedBox(height: 20),
+                _menu([
+                  CheckboxListTile(
+                    value: acknowledged,
+                    title: const Text(
+                      '안내 사항을 모두 확인했어요',
+                      style: TextStyle(color: _green, fontSize: 15),
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    onChanged: (value) =>
+                        update(() => acknowledged = value ?? false),
+                  ),
+                ]),
+                const SizedBox(height: 20),
+                _menu([
+                  _field('비밀번호 확인', '', (_) {}, secret: true, hint: '현재 비밀번호'),
+                ]),
               ],
               back: '계정 관리',
               action: _action(
@@ -968,6 +1062,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         }
                       }
                     : null,
+                color: const Color(0xFFD9534F),
               ),
             ),
           ),
@@ -1211,6 +1306,7 @@ Widget _field(
   bool secret = false,
   bool required = true,
   int lines = 1,
+  String? hint,
   FormFieldValidator<String>? validator,
 }) => Padding(
   padding: const EdgeInsets.all(10),
@@ -1221,7 +1317,11 @@ Widget _field(
     keyboardType: numeric
         ? const TextInputType.numberWithOptions(decimal: true)
         : null,
-    decoration: InputDecoration(labelText: label),
+    decoration: InputDecoration(
+      labelText: label,
+      hintText: hint,
+      floatingLabelBehavior: hint == null ? null : FloatingLabelBehavior.always,
+    ),
     onChanged: change,
     validator:
         validator ??
@@ -1236,18 +1336,102 @@ Widget _field(
   ),
 );
 
-Widget _action(String title, VoidCallback? onPressed) => SizedBox(
-  width: double.infinity,
-  height: 50,
-  child: FilledButton(
-    style: FilledButton.styleFrom(
-      backgroundColor: _green,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    ),
-    onPressed: onPressed,
-    child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+// 선택된 항목 오른쪽의 체크 표시(Figma).
+const _checkMark = Icon(Icons.check, color: AppTheme.accent, size: 20);
+
+// 상단 오른쪽 글자 버튼(저장·추가).
+Widget _topAction(String label, VoidCallback onPressed) => TextButton(
+  onPressed: onPressed,
+  style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
+  child: Text(label, style: const TextStyle(fontSize: 17)),
+);
+
+// 왼쪽에 이름, 오른쪽에 값과 단위를 놓는 한 줄 입력(정보 수정).
+Widget _inlineField(
+  String label,
+  String initial,
+  ValueChanged<String> change, {
+  String? unit,
+  bool numeric = false,
+}) => Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+  child: Row(
+    children: [
+      Text(label, style: const TextStyle(color: _green, fontSize: 16)),
+      Expanded(
+        child: TextFormField(
+          initialValue: initial,
+          textAlign: TextAlign.right,
+          keyboardType: numeric
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : null,
+          style: const TextStyle(color: _green, fontSize: 16),
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            filled: false,
+            isDense: true,
+          ),
+          onChanged: change,
+          validator: (value) {
+            final input = value?.trim() ?? '';
+            if (input.isEmpty) return '$label 항목을 입력해 주세요.';
+            if (numeric && !(double.tryParse(input)?.isFinite ?? false)) {
+              return '숫자를 입력해 주세요.';
+            }
+            return null;
+          },
+        ),
+      ),
+      if (unit != null) ...[
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 36,
+          child: Text(unit, style: _small.copyWith(fontSize: 15)),
+        ),
+      ],
+    ],
   ),
 );
+
+// 목록 기호가 있는 안내 문장 한 줄.
+Widget _bullet(List<InlineSpan> spans) => Padding(
+  padding: const EdgeInsets.symmetric(vertical: 5),
+  child: Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Padding(
+        padding: EdgeInsets.fromLTRB(2, 9, 12, 0),
+        child: CircleAvatar(radius: 2.5, backgroundColor: _muted),
+      ),
+      Expanded(
+        child: Text.rich(
+          TextSpan(
+            style: const TextStyle(color: _muted, fontSize: 15, height: 1.5),
+            children: spans,
+          ),
+        ),
+      ),
+    ],
+  ),
+);
+
+Widget _action(String title, VoidCallback? onPressed, {Color color = _green}) =>
+    SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        onPressed: onPressed,
+        child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    );
 
 // 화면 아래에서 띄우는 거리. Figma는 화면 아래에서 131(탭 화면은 하단 탭 높이만큼 뺌).
 void _toast(BuildContext context, String message, {bool tab = false}) =>
