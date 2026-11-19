@@ -16,21 +16,39 @@ class PostComment {
 }
 
 class _PostState {
+  _PostState({this.likes = 12, List<PostComment>? comments})
+    : comments =
+          comments ??
+          [
+            const PostComment('프로필 이름', '오늘도 화이팅!'),
+            const PostComment('프로필 이름', '식단 맛있어 보여요'),
+          ];
+
   bool liked = false;
-  int likes = 12;
+  int likes;
   bool flameSent = false;
-  final comments = <PostComment>[
-    const PostComment('프로필 이름', '오늘도 화이팅!'),
-    const PostComment('프로필 이름', '식단 맛있어 보여요'),
-  ];
+  final List<PostComment> comments;
 }
 
 /// 게시물별 좋아요·불꽃·댓글 상태. 서버가 없어 앱 실행 중에만 유지된다.
 /// PRD: 좋아요는 게시물당 사용자 1회 토글, 불꽃 보내기는 게시물당 1회(제안값, N13).
+///
+/// 게시물 번호가 0 이상이면 Figma 샘플 값(좋아요 12, 댓글 2)으로 시작하고,
+/// 음수(사용자가 새로 올린 게시물)는 빈 상태로 시작한다.
 class PostInteractionStore extends ChangeNotifier {
   final _posts = <int, _PostState>{};
 
-  _PostState _of(int post) => _posts.putIfAbsent(post, _PostState.new);
+  _PostState _of(int post) => _posts.putIfAbsent(
+    post,
+    () => post < 0 ? _PostState(likes: 0, comments: []) : _PostState(),
+  );
+
+  /// 샘플 게시물의 처음 값을 정한다. 화면이 그려지기 전에 부른다.
+  void seed(
+    int post, {
+    required int likes,
+    required List<PostComment> comments,
+  }) => _posts[post] = _PostState(likes: likes, comments: [...comments]);
 
   bool isLiked(int post) => _of(post).liked;
   int likeCount(int post) => _of(post).likes;
@@ -64,11 +82,15 @@ class PostDetailScreen extends StatelessWidget {
   const PostDetailScreen({
     required this.photoIndex,
     required this.store,
+    this.postId,
     super.key,
   });
 
   final int photoIndex;
   final PostInteractionStore store;
+
+  /// 좋아요·댓글 상태를 찾는 번호. 없으면 [photoIndex]를 쓴다.
+  final int? postId;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -158,25 +180,7 @@ class PostDetailScreen extends StatelessWidget {
               ),
               // 행 높이 44(터치 영역) 안에서 불꽃 버튼(38)이 Figma 위치에 오도록 17.
               const SizedBox(height: 17),
-              ListenableBuilder(
-                listenable: store,
-                builder: (context, _) => _ActionRow(
-                  liked: store.isLiked(photoIndex),
-                  likes: store.likeCount(photoIndex),
-                  comments: store.comments(photoIndex).length,
-                  flameSent: store.isFlameSent(photoIndex),
-                  onLike: () => store.toggleLike(photoIndex),
-                  onComment: () => _showComments(context),
-                  onFlame: () {
-                    store.sendFlame(photoIndex);
-                    ScaffoldMessenger.of(context)
-                      ..hideCurrentSnackBar()
-                      ..showSnackBar(
-                        const SnackBar(content: Text('불꽃을 보냈어요.')),
-                      );
-                  },
-                ),
-              ),
+              PostActionRow(store: store, postId: postId ?? photoIndex),
               const SizedBox(height: 12),
               const Text(
                 '오운완',
@@ -197,16 +201,41 @@ class PostDetailScreen extends StatelessWidget {
       ),
     ),
   );
+}
 
-  void _showComments(BuildContext context) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    constraints: const BoxConstraints(maxWidth: 402),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+/// 좋아요·댓글·불꽃 보내기 행. 게시물 상세와 크루 피드가 함께 쓴다.
+class PostActionRow extends StatelessWidget {
+  const PostActionRow({required this.store, required this.postId, super.key});
+
+  final PostInteractionStore store;
+  final int postId;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: store,
+    builder: (context, _) => _ActionRow(
+      liked: store.isLiked(postId),
+      likes: store.likeCount(postId),
+      comments: store.comments(postId).length,
+      flameSent: store.isFlameSent(postId),
+      onLike: () => store.toggleLike(postId),
+      onComment: () => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        constraints: const BoxConstraints(maxWidth: 402),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (_) => _CommentsSheet(post: postId, store: store),
+      ),
+      onFlame: () {
+        store.sendFlame(postId);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('불꽃을 보냈어요.')));
+      },
     ),
-    builder: (_) => _CommentsSheet(post: photoIndex, store: store),
   );
 }
 

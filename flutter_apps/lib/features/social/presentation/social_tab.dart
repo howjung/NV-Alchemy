@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_overlays.dart';
+import 'crew_post_card.dart';
 import 'post_detail_screen.dart';
 
 const _ink = AppTheme.primary;
@@ -12,6 +13,16 @@ const _blue = Color(0xFFE2F1F3);
 const _crewName = '칼로리 컷어스';
 const _crewGoal = '-5kg 감량 | 밀키트 식단 위주';
 const _gutter = EdgeInsets.symmetric(horizontal: 20);
+
+// 크루 피드 샘플 게시물 (Figma SOC-03).
+const _crewSamples = [
+  (meta: '점심 · 2분 전 · 380 kcal', caption: '오운완 · 점심 380 kcal', time: '2분 전'),
+  (
+    meta: '저녁 · 1시간 전 · 410 kcal',
+    caption: '단백질 채우기 성공 · 저녁 410 kcal',
+    time: '1시간 전',
+  ),
+];
 
 enum SocialView { crew, explore, feed }
 
@@ -31,10 +42,27 @@ class _SocialTabState extends State<SocialTab> {
   String? _created;
   String _description = '';
   String _query = '';
-  final _posts = <String>[];
+  // 내가 올린 게시물. 번호는 음수로 줄어들어 샘플·전체 피드 번호와 겹치지 않는다.
+  final _posts = <({int id, String caption})>[];
+  int _nextPostId = -1;
   final _members = [for (var i = 0; i < 4; i++) '프로필 이름'];
   final _requests = [false, false, false, false];
   final _postStore = PostInteractionStore();
+
+  @override
+  void initState() {
+    super.initState();
+    // Figma 크루 피드의 두 번째 게시물(좋아요 7, 댓글 3).
+    _postStore.seed(
+      1,
+      likes: 7,
+      comments: const [
+        PostComment('프로필 이름', '단백질 챙기기 대단해요'),
+        PostComment('프로필 이름', '저도 따라 해볼래요'),
+        PostComment('프로필 이름', '내일도 같이 인증해요'),
+      ],
+    );
+  }
 
   @override
   void dispose() {
@@ -394,39 +422,35 @@ class _SocialTabState extends State<SocialTab> {
         ],
       ),
       const SizedBox(height: 20),
-      for (final caption in _posts) ...[
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: _avatar(18),
-          title: const Text('내 게시물'),
-          subtitle: Text(caption),
+      // 내가 올린 게시물이 맨 위, 그다음 크루원 게시물.
+      for (final post in _posts) ...[
+        CrewPostCard(
+          postId: post.id,
+          photoIndex: -post.id % 15,
+          author: '나',
+          shortName: '나',
+          meta: '방금 · 크루 인증',
+          caption: post.caption,
+          time: '방금 전',
+          store: _postStore,
+          onOpen: () => _openPost(-post.id % 15, postId: post.id),
         ),
-        const Divider(),
+        const SizedBox(height: 28),
       ],
-      ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const CircleAvatar(
-          backgroundColor: _tint,
-          child: Text('민지', style: TextStyle(fontSize: 12)),
+      for (final (i, post) in _crewSamples.indexed) ...[
+        CrewPostCard(
+          postId: i,
+          photoIndex: i,
+          author: '김민지',
+          shortName: '민지',
+          meta: post.meta,
+          caption: post.caption,
+          time: post.time,
+          store: _postStore,
+          onOpen: () => _openPost(i),
         ),
-        title: const Text('김민지', style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text(
-          '점심 · 2분 전 · 380 kcal',
-          style: TextStyle(color: _muted),
-        ),
-        trailing: const AppMenu<String>(
-          tooltip: '게시물 메뉴',
-          items: [AppMenuItem('hide', '관심 없음'), AppMenuItem('report', '신고하기')],
-          child: Padding(
-            padding: EdgeInsets.all(10),
-            child: Icon(Icons.more_horiz, color: _muted),
-          ),
-        ),
-      ),
-      ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: _tappableTile(0, () => _openPost(0)),
-      ),
+        const SizedBox(height: 28),
+      ],
     ],
   );
 
@@ -459,11 +483,16 @@ class _SocialTabState extends State<SocialTab> {
     ],
   );
 
-  void _openPost(int index) => Navigator.of(context).push<void>(
-    MaterialPageRoute(
-      builder: (_) => PostDetailScreen(photoIndex: index, store: _postStore),
-    ),
-  );
+  void _openPost(int photoIndex, {int? postId}) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => PostDetailScreen(
+            photoIndex: photoIndex,
+            postId: postId,
+            store: _postStore,
+          ),
+        ),
+      );
 
   Future<void> _create() async {
     final result = await Navigator.of(context)
@@ -482,7 +511,9 @@ class _SocialTabState extends State<SocialTab> {
     final caption = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const SocialComposeScreen()),
     );
-    if (caption != null && mounted) setState(() => _posts.insert(0, caption));
+    if (caption != null && mounted) {
+      setState(() => _posts.insert(0, (id: _nextPostId--, caption: caption)));
+    }
   }
 
   Future<void> _crewAction(String action) async {
