@@ -526,7 +526,7 @@ class _ProfileTabState extends State<ProfileTab> {
           children: [
             Expanded(
               child: Text(
-                '${(74 - (double.tryParse(_goal) ?? 68)).abs().toStringAsFixed(1)}kg 남음',
+                '${((double.tryParse(userProfile['weight']!) ?? 74) - (double.tryParse(_goal) ?? 68)).abs().toStringAsFixed(1)}kg 남음',
                 style: _strong.copyWith(fontSize: 24),
               ),
             ),
@@ -552,7 +552,7 @@ class _ProfileTabState extends State<ProfileTab> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('시작 77.3kg', style: _small),
-            const Text('현재 74kg', style: _small),
+            Text('현재 ${userProfile['weight']}kg', style: _small),
             Text(
               '목표 $_goal'
               'kg',
@@ -723,10 +723,10 @@ class _ProfileTabState extends State<ProfileTab> {
                     numeric: true,
                   ),
                 ]),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
                   child: Text(
-                    '현재 체중 74kg 기준으로 활동량을 바꾸면 자동 계산돼요. 직접 고칠 수도 있어요.',
+                    '현재 체중 ${userProfile['weight']}kg 기준으로 활동량을 바꾸면 자동 계산돼요. 직접 고칠 수도 있어요.',
                     style: _small,
                   ),
                 ),

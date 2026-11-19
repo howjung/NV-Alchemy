@@ -2,8 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
+import '../../../core/widgets/app_overlays.dart';
 import '../../../core/widgets/app_screen_frame.dart';
 
 class ProfileOnboardingScreen extends StatefulWidget {
@@ -237,9 +239,9 @@ class BodyGoalOnboardingScreen extends StatefulWidget {
 
 class _BodyGoalOnboardingScreenState extends State<BodyGoalOnboardingScreen> {
   int _activity = 1;
-  final _height = TextEditingController(text: '175');
-  final _current = TextEditingController(text: '74');
-  final _goal = TextEditingController(text: '68');
+  final _height = TextEditingController(text: userProfile['height']);
+  final _current = TextEditingController(text: userProfile['weight']);
+  final _goal = TextEditingController(text: userProfile['goal']);
 
   @override
   void dispose() {
@@ -375,11 +377,27 @@ class _BodyGoalOnboardingScreenState extends State<BodyGoalOnboardingScreen> {
                 const SizedBox(height: 28),
                 PrimaryButton(
                   label: '다음',
-                  onPressed: () => Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    AppRoutes.home,
-                    (_) => false,
-                  ),
+                  onPressed: () {
+                    final ok = [
+                      _height,
+                      _current,
+                      _goal,
+                    ].every((c) => (double.tryParse(c.text.trim()) ?? 0) > 0);
+                    if (!ok) {
+                      showAppToast(context, '키와 체중을 숫자로 입력해 주세요');
+                      return;
+                    }
+                    userProfile
+                      ..['height'] = _height.text.trim()
+                      ..['weight'] = _current.text.trim()
+                      ..['goal'] = _goal.text.trim()
+                      ..['activity'] = ['비활동적', '보통 활동', '활동적'][_activity];
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      AppRoutes.home,
+                      (_) => false,
+                    );
+                  },
                 ),
               ],
             ),

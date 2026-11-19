@@ -17,6 +17,7 @@ const _seedProfile = {
   'gender': '남성',
   'age': '25',
   'height': '175',
+  'weight': '74',
   'goal': '68',
   'calories': '2442',
   'activity': '보통 활동',
@@ -27,6 +28,10 @@ const _key = 'user_data_v1';
 final userAddresses = <List<String>>[List.of(_seedAddress)];
 final userCards = <String>[_seedCard];
 final userProfile = Map<String, String>.of(_seedProfile);
+
+/// 소수점이 없으면 정수로 적는다(74.0 → 74).
+String numText(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
+
 final userAlerts = [true, true, true];
 var hasSubscription = false;
 

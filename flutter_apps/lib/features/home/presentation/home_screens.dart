@@ -10,6 +10,7 @@ import '../../social/presentation/social_tab.dart';
 import '../../records/presentation/records_tab.dart';
 
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_overlays.dart';
 import '../../../core/widgets/app_screen_frame.dart';
@@ -37,10 +38,14 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   late int _index = widget.initialIndex;
-  HomeMetrics _metrics = (height: 172, weight: 68.2, goal: 63);
+  HomeMetrics _metrics = (
+    height: double.tryParse(userProfile['height']!) ?? 175,
+    weight: double.tryParse(userProfile['weight']!) ?? 74,
+    goal: double.tryParse(userProfile['goal']!) ?? 68,
+  );
 
   static final _dashboardDate = DateTime(2026, 10, 21);
-  final _weights = <DateTime, double>{_dashboardDate: 68.2};
+  late final _weights = <DateTime, double>{_dashboardDate: _metrics.weight};
 
   final _mealsByDate = <DateTime, Map<String, HomeMeal>>{
     DateTime(2026, 10, 21): {
@@ -67,13 +72,22 @@ class _MainShellState extends State<MainShell> {
         _weights[_dashboardDate] = metrics.weight;
       }
       _metrics = metrics;
+      _syncProfile();
     });
+  }
+
+  // 홈에서 고친 키·체중·목표를 프로필과 같은 값으로 맞춘다.
+  void _syncProfile() {
+    userProfile['height'] = numText(_metrics.height);
+    userProfile['weight'] = numText(_metrics.weight);
+    userProfile['goal'] = numText(_metrics.goal);
   }
 
   void _saveWeight(DateTime date, double weight) {
     setState(() {
       _weights[date] = weight;
       _metrics = (height: _metrics.height, weight: weight, goal: _metrics.goal);
+      _syncProfile();
     });
   }
 
@@ -400,7 +414,7 @@ class _HomeHeroState extends State<_HomeHero> {
                 _AiBadge(),
                 SizedBox(height: 3),
                 Text(
-                  '단백질이 34g 부족해요',
+                  '단백질이 53g 부족해요',
                   style: TextStyle(
                     color: AppTheme.primary,
                     fontSize: 15,
