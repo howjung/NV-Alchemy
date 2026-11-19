@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_overlays.dart';
+import 'post_detail_screen.dart';
 
 const _ink = AppTheme.primary;
 const _muted = AppTheme.muted;
@@ -452,25 +453,7 @@ class _SocialTabState extends State<SocialTab> {
   );
 
   void _openPost(int index) => Navigator.of(context).push<void>(
-    MaterialPageRoute(
-      builder: (_) => _SocialPage(
-        title: '게시물',
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            const ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('김민지'),
-              subtitle: Text('점심 · 2분 전 · 380 kcal'),
-            ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: _FoodTile(index),
-            ),
-          ],
-        ),
-      ),
-    ),
+    MaterialPageRoute(builder: (_) => PostDetailScreen(photoIndex: index)),
   );
 
   Future<void> _create() async {
