@@ -21,6 +21,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
   DateTime? _birthday;
 
   Future<void> _pickBirthday() async {
+    final today = DateTime.now(); // 만 14~100세만 선택 가능(PRD N23)
     var selected = _birthday ?? DateTime(2001, 1, 1);
     final result = await showModalBottomSheet<DateTime>(
       context: context,
@@ -55,16 +56,24 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
                   mode: CupertinoDatePickerMode.date,
                   dateOrder: DatePickerDateOrder.ymd,
                   initialDateTime: selected,
-                  minimumDate: DateTime(1925, 10, 14),
-                  maximumDate: DateTime(2016, 10, 13),
+                  minimumDate: DateTime(
+                    today.year - 100,
+                    today.month,
+                    today.day,
+                  ),
+                  maximumDate: DateTime(
+                    today.year - 14,
+                    today.month,
+                    today.day,
+                  ),
                   onDateTimeChanged: (date) => selected = date,
                 ),
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(12),
               child: Text(
-                '1925년 10월 14일 ~ 2016년 10월 13일 중에서 고를 수 있어요.',
+                '${today.year - 100}년 ${today.month}월 ${today.day}일 ~ ${today.year - 14}년 ${today.month}월 ${today.day}일 중에서 고를 수 있어요.',
                 style: TextStyle(color: AppTheme.muted, fontSize: 12),
               ),
             ),
