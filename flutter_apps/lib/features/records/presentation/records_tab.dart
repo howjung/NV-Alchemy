@@ -11,6 +11,7 @@ class RecordsTab extends StatefulWidget {
     required this.onOpenShop,
     required this.mealsByDate,
     required this.onMealSaved,
+    required this.onMealDeleted,
     required this.weights,
     required this.onWeightSaved,
     super.key,
@@ -19,6 +20,7 @@ class RecordsTab extends StatefulWidget {
   final VoidCallback onOpenShop;
   final Map<DateTime, Map<String, HomeMeal>> mealsByDate;
   final void Function(DateTime, HomeMeal) onMealSaved;
+  final void Function(DateTime, String) onMealDeleted;
   final Map<DateTime, double> weights;
   final void Function(DateTime, double) onWeightSaved;
 
@@ -302,8 +304,8 @@ class _RecordsTabState extends State<RecordsTab> {
   }
 
   bool _hasRecord(DateTime day) =>
-      widget.mealsByDate.containsKey(day) ||
-      day.year == 2026 && day.month == 10 && day.day >= 19 && day.day <= 21;
+      (widget.mealsByDate[day]?.isNotEmpty ?? false) ||
+      widget.weights.containsKey(day);
 
   Widget _calendarDay(
     DateTime month,
@@ -638,6 +640,66 @@ class _RecordsTabState extends State<RecordsTab> {
     ],
   );
 
+  Future<void> _showMealDetails(HomeMeal meal) async {
+    final date = _date;
+    final deleted = await showHomeSheet<bool>(
+      context,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('${meal.type} 식단 상세', style: _bold)),
+              IconButton(
+                tooltip: '닫기',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          Text(
+            MaterialLocalizations.of(context).formatFullDate(date),
+            style: _muted,
+          ),
+          const SizedBox(height: 20),
+          Text(meal.values[0], style: _bold.copyWith(fontSize: 20)),
+          const SizedBox(height: 16),
+          for (final (label, value) in [
+            ('칼로리', '${meal.values[1]} kcal'),
+            ('탄수화물', '${meal.values[2]} g'),
+            ('단백질', '${meal.values[3]} g'),
+            ('지방', '${meal.values[4]} g'),
+          ])
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  Expanded(child: Text(label, style: _muted)),
+                  Text(value, style: _bold),
+                ],
+              ),
+            ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('식단 삭제'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || deleted != true) return;
+    widget.onMealDeleted(date, meal.type);
+  }
+
   Widget _meal(String label, HomeMeal? meal) {
     final values = meal?.values;
     final food = values?[0];
@@ -689,26 +751,35 @@ class _RecordsTabState extends State<RecordsTab> {
               decoration: const BoxDecoration(
                 border: Border(left: BorderSide(color: _line, width: 2)),
               ),
-              child: Column(
-                children: [
-                  Row(
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: () => _showMealDetails(meal!),
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(food, style: _bold.copyWith(fontSize: 15)),
-                            const SizedBox(height: 4),
-                            Text('$kcal kcal · $macros', style: _muted),
-                          ],
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(food, style: _bold.copyWith(fontSize: 15)),
+                                const SizedBox(height: 4),
+                                Text('$kcal kcal · $macros', style: _muted),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right,
+                            color: Color(0xFF9AAAA4),
+                          ),
+                        ],
                       ),
-                      const Icon(Icons.chevron_right, color: Color(0xFF9AAAA4)),
+                      const SizedBox(height: 12),
+                      const Divider(color: _line),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  const Divider(color: _line),
-                ],
+                ),
               ),
             ),
         ],

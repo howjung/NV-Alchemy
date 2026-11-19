@@ -52,6 +52,14 @@ class _MainShellState extends State<MainShell> {
     setState(() => (_mealsByDate[date] ??= {})[meal.type] = meal);
   }
 
+  void _deleteMeal(DateTime date, String type) {
+    setState(() {
+      final meals = _mealsByDate[date];
+      meals?.remove(type);
+      if (meals != null && meals.isEmpty) _mealsByDate.remove(date);
+    });
+  }
+
   void _updateHomeMetrics(HomeMetrics metrics) {
     setState(() {
       if (metrics.weight != _metrics.weight) {
@@ -94,6 +102,7 @@ class _MainShellState extends State<MainShell> {
               onWeightSaved: _saveWeight,
               mealsByDate: _mealsByDate,
               onMealSaved: _saveMeal,
+              onMealDeleted: _deleteMeal,
             ),
             SocialTab(initialView: widget.initialSocialView),
             ShoppingTab(
