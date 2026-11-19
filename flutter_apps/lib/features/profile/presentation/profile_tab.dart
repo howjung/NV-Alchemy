@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/navigation/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_overlays.dart';
 import 'profile_text.dart';
 
 const _green = AppTheme.primary;
@@ -84,22 +85,25 @@ class _ProfileTabState extends State<ProfileTab> {
             ),
             const SizedBox(height: 20),
             _panel([
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: _avatar(30),
-                title: Text(_name, style: _strong.copyWith(fontSize: 20)),
-                subtitle: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_email, style: _small),
-                    Text(
-                      '신체 지표 · 목표 진행 보기',
-                      style: TextStyle(color: AppTheme.accent, fontSize: 12),
-                    ),
-                  ],
+              Material(
+                type: MaterialType.transparency,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: _avatar(30),
+                  title: Text(_name, style: _strong.copyWith(fontSize: 20)),
+                  subtitle: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_email, style: _small),
+                      Text(
+                        '신체 지표 · 목표 진행 보기',
+                        style: TextStyle(color: AppTheme.accent, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  trailing: const Icon(Icons.chevron_right, color: _muted),
+                  onTap: () => _open(ProfileView.metrics),
                 ),
-                trailing: const Icon(Icons.chevron_right, color: _muted),
-                onTap: () => _open(ProfileView.metrics),
               ),
             ]),
             const SizedBox(height: 16),
@@ -187,15 +191,21 @@ class _ProfileTabState extends State<ProfileTab> {
               _row('서비스 이용약관', () => _open(ProfileView.terms)),
               _row('개인정보 처리방침', () => _open(ProfileView.privacy)),
               _row('오픈소스 라이선스', () => _open(ProfileView.licenses)),
-              const ListTile(
-                title: Text('앱 버전'),
-                trailing: Text('1.0.0', style: _small),
+              ListTile(
+                title: const Text('앱 버전'),
+                trailing: const Text('1.0.0', style: _small),
+                onTap: () => _toast(context, '최신 버전이에요', tab: true),
               ),
             ]),
             const SizedBox(height: 16),
             OutlinedButton(
               onPressed: () async {
-                if (await _confirm(context, '로그아웃', '로그아웃하시겠어요?') &&
+                if (await showConfirmPopup(
+                      context,
+                      title: '로그아웃할까요?',
+                      message: '언제든 다시 로그인할 수 있어요.',
+                      confirmLabel: '로그아웃',
+                    ) &&
                     context.mounted) {
                   Navigator.pushNamedAndRemoveUntil(
                     context,
@@ -433,9 +443,10 @@ class _ProfileTabState extends State<ProfileTab> {
         const SizedBox(height: 10),
         const Text('끈 알림은 알림함에도 쌓이지 않아요.', style: _small),
         _group('기기 알림', [
-          const ListTile(
-            title: Text('기기 알림 권한'),
-            trailing: Text('허용 필요', style: _small),
+          ListTile(
+            title: const Text('기기 알림 권한'),
+            trailing: const Text('허용 필요', style: _small),
+            onTap: () => _toast(context, '기기 설정에서 알림을 허용해 주세요'),
           ),
         ]),
         const SizedBox(height: 10),
@@ -451,33 +462,12 @@ class _ProfileTabState extends State<ProfileTab> {
       ]),
       ProfileView.notices => _page(context, '공지사항', [
         _menu([
-          _row(
-            '연속 기록 보상이 생겼어요',
-            () => _message(
-              context,
-              '연속 기록 보상이 생겼어요',
-              '식단을 하루에 처음 기록하면 5P를 받고, 연속 기록 일수가 늘어나요.',
+          for (final (title, date, body) in _notices)
+            _row(
+              title,
+              () => _infoSheet(context, title, date, body),
+              subtitle: date,
             ),
-            subtitle: '2026.10.21',
-          ),
-          _row(
-            '상품 구매 포인트 적립 정책 변경',
-            () => _message(
-              context,
-              '상품 구매 포인트 적립 정책 변경',
-              '상품 구매 후 포인트 내역을 확인할 수 있어요.',
-            ),
-            subtitle: '안내',
-          ),
-          _row(
-            'Antifreeze 서비스를 시작해요',
-            () => _message(
-              context,
-              'Antifreeze 서비스를 시작해요',
-              '식단을 기록하고 크루와 함께 꾸준히 이어가세요.',
-            ),
-            subtitle: '안내',
-          ),
         ]),
       ]),
       ProfileView.help => _help(context),
@@ -715,6 +705,7 @@ class _ProfileTabState extends State<ProfileTab> {
       ),
     );
     if (saved != true || !mounted) return;
+    if (context.mounted) _toast(context, '저장되었어요');
     setState(() {
       _name = fields[0].trim();
       _age = fields[1].trim();
@@ -774,10 +765,11 @@ class _ProfileTabState extends State<ProfileTab> {
                 if (index != null)
                   TextButton(
                     onPressed: () async {
-                      if (await _confirm(
+                      if (await showConfirmPopup(
                             context,
-                            '배송지 삭제',
-                            '이 배송지를 삭제하시겠어요?',
+                            title: '배송지를 삭제할까요?',
+                            message: '삭제한 배송지는 되돌릴 수 없어요.',
+                            confirmLabel: '삭제하기',
                           ) &&
                           context.mounted) {
                         Navigator.pop(context, 'delete');
@@ -798,6 +790,9 @@ class _ProfileTabState extends State<ProfileTab> {
       ),
     );
     if (result == null || !mounted) return;
+    if (context.mounted) {
+      _toast(context, result == 'save' ? '저장되었어요' : '배송지가 삭제되었어요');
+    }
     setState(() {
       if (index != null) _addresses.removeAt(index);
       if (result == 'save') {
@@ -849,6 +844,7 @@ class _ProfileTabState extends State<ProfileTab> {
       ),
     );
     if (saved != true || !mounted) return;
+    if (context.mounted) _toast(context, '결제 수단이 추가되었어요');
     setState(() => _cards.add('${issuer.trim()} ···· $lastFour'));
     refresh(() {});
   }
@@ -889,7 +885,8 @@ class _ProfileTabState extends State<ProfileTab> {
             const SizedBox(height: 16),
             _action('변경하기', () {
               if (form.currentState!.validate()) {
-                _message(context, '비밀번호 변경', '데모에서는 입력 형식만 확인할 수 있어요.');
+                _toast(context, '비밀번호가 변경되었어요');
+                Navigator.pop(context);
               }
             }),
           ], back: '계정 관리'),
@@ -953,9 +950,21 @@ class _ProfileTabState extends State<ProfileTab> {
               action: _action(
                 '탈퇴하기',
                 acknowledged
-                    ? () {
-                        if (form.currentState!.validate()) {
-                          _message(context, '회원 탈퇴', '데모에서는 계정을 삭제할 수 없어요.');
+                    ? () async {
+                        if (form.currentState!.validate() &&
+                            await showConfirmPopup(
+                              context,
+                              title: '정말 탈퇴할까요?',
+                              message: '탈퇴하면 기록과 포인트가 모두 삭제되고 되돌릴 수 없어요.',
+                              confirmLabel: '탈퇴하기',
+                            ) &&
+                            context.mounted) {
+                          // 서버 연결 전이라 계정은 지우지 않고 로그인 화면으로만 보낸다.
+                          Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            AppRoutes.login,
+                            (_) => false,
+                          );
                         }
                       }
                     : null,
@@ -968,18 +977,13 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Widget _help(BuildContext context) {
-    const questions = [
-      ('권장 칼로리는 어떻게 계산되나요?', '입력한 신체 정보와 활동량을 기준으로 계산해요.'),
-      ('포인트는 어떻게 모으고 쓰나요?', '식단 기록과 크루 활동으로 모아 쇼핑에서 사용할 수 있어요.'),
-      ('연속 기록이 끊겼어요.', '오늘 식단을 기록하면 다시 시작할 수 있어요.'),
-      ('정기 구독을 건너뛰거나 해지하려면?', '주문 · 구독 내역에서 정기 구독을 선택해 주세요.'),
-      ('크루를 나가고 싶어요.', '내 크루의 더보기 메뉴에서 탈퇴할 수 있어요.'),
-      ('불쾌한 게시물을 봤어요.', '게시물 메뉴에서 신고 옵션을 확인해 주세요.'),
-    ];
     return _page(context, '고객센터', [
       _group('자주 묻는 질문', [
-        for (final (question, answer) in questions)
-          _row(question, () => _message(context, question, answer)),
+        for (final (question, answer) in _faqs)
+          _row(
+            question,
+            () => _infoSheet(context, question, '자주 묻는 질문', answer),
+          ),
       ]),
       _group('1:1 문의', [
         _row('문의하기', () {
@@ -1003,7 +1007,8 @@ class _ProfileTabState extends State<ProfileTab> {
                   back: '고객센터',
                   action: _action('문의하기', () {
                     if (form.currentState!.validate()) {
-                      _message(context, '1:1 문의', '데모에서는 문의를 전송할 수 없어요.');
+                      _toast(context, '문의가 접수되었어요');
+                      Navigator.pop(context);
                     }
                   }),
                 ),
@@ -1244,41 +1249,112 @@ Widget _action(String title, VoidCallback? onPressed) => SizedBox(
   ),
 );
 
-Future<bool> _confirm(BuildContext context, String title, String text) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(text),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('확인'),
-          ),
-        ],
-      ),
-    ) ??
-    false;
+// 화면 아래에서 띄우는 거리. Figma는 화면 아래에서 131(탭 화면은 하단 탭 높이만큼 뺌).
+void _toast(BuildContext context, String message, {bool tab = false}) =>
+    showAppToast(context, message, bottom: tab ? 48 : 131);
 
-void _message(BuildContext context, String title, String text) =>
+const _notices = [
+  (
+    '연속 기록 보상이 생겼어요',
+    '2026.10.13',
+    '식단을 하루에 처음 기록하면 5P를 받고, 연속 기록 일수가 늘어나요. 물방울 모양의 연속 기록은 홈 상단 물방울 버튼에서 확인할 수 있어요.',
+  ),
+  (
+    '상품 구매 포인트 적립 정책 변경 안내',
+    '2026.10.10',
+    '상품 구매 시 결제 금액의 1%가 포인트로 적립돼요. 적립된 포인트는 다음 주문부터 사용할 수 있어요.',
+  ),
+  (
+    'Antifreeze 서비스를 시작해요',
+    '2026.10.01',
+    'Antifreeze와 함께 AI 맞춤 식단을 시작해 보세요. 식단 기록, 쇼핑, 크루까지 한곳에서 이어져요.',
+  ),
+];
+
+const _faqs = [
+  (
+    '권장 칼로리는 어떻게 계산되나요?',
+    '키, 몸무게, 나이, 성별로 기초대사량을 구하고 활동량을 곱해 하루 목표 칼로리를 계산해요. 프로필 · 신체 지표에서 정보를 바꾸면 바로 반영돼요.',
+  ),
+  (
+    '포인트는 어떻게 모으고 쓰나요?',
+    '식단을 기록하고 연속 기록 보상을 받으면 포인트가 쌓여요. 쌓인 포인트는 쇼핑에서 결제할 때 사용할 수 있어요.',
+  ),
+  ('연속 기록이 끊겼어요.', '하루 한 끼 이상 기록하지 않으면 연속 기록이 0일로 돌아가요. 다음 날부터 다시 쌓을 수 있어요.'),
+  (
+    '정기 구독을 건너뛰거나 해지하려면?',
+    '쇼핑의 주문 · 구독 내역에서 다음 배송 건너뛰기나 구독 해지를 할 수 있어요. 이미 결제한 배송은 그대로 도착해요.',
+  ),
+  (
+    '크루를 나가고 싶어요.',
+    '소셜의 내 크루 화면 오른쪽 위 메뉴에서 크루 탈퇴를 선택하면 돼요. 크루장은 먼저 크루를 삭제해야 해요.',
+  ),
+  (
+    '불쾌한 게시물을 봤어요.',
+    '게시물 오른쪽 위 메뉴에서 신고하거나 작성자를 차단할 수 있어요. 차단한 사용자는 프로필 · 차단한 사용자에서 확인해요.',
+  ),
+];
+
+/// 공지·FAQ 시트 (Figma Overlay/프로필 시트): 제목, 보조 줄, 구분선, 본문, "확인".
+void _infoSheet(BuildContext context, String title, String sub, String body) =>
     showModalBottomSheet<void>(
       context: context,
+      backgroundColor: Colors.white,
+      barrierColor: const Color(0x730F1722),
+      constraints: const BoxConstraints(maxWidth: 402),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: _strong.copyWith(fontSize: 18)),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const SizedBox(height: 12),
-              Text(text, style: _small),
-              const SizedBox(height: 20),
-              _action('닫기', () => Navigator.pop(context)),
+              Text(title, style: _strong.copyWith(fontSize: 18, height: 1.3)),
+              const SizedBox(height: 12),
+              // Figma는 #9AAAA4(흰 배경에서 2.4:1)지만 글자 대비 4.5:1을 위해 공용 보조색을 쓴다.
+              Text(sub, style: _small),
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: AppTheme.border),
+              const SizedBox(height: 12),
+              // 글자를 크게 키우거나 화면이 작아도 넘치지 않게 본문만 스크롤한다.
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Text(
+                    body,
+                    style: const TextStyle(color: _green, fontSize: 15),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _green,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    '확인',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
