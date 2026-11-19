@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ServeStaticModule } from '@nestjs/serve-static';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -16,15 +16,29 @@ import { MealsModule } from './meals/meals.module';
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      username: 'postgres',
-      password: 'postgres',
-      database: 'antifreeze_db',
-      autoLoadEntities: true,
-      synchronize: true,
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        // DB_TYPE=sqljs: Postgres 없이 로컬 파일(dev.sqlite)로 실행하는 개발용 모드
+        config.get('DB_TYPE') === 'sqljs'
+          ? {
+              type: 'sqljs' as const,
+              location: 'dev.sqlite',
+              autoSave: true,
+              autoLoadEntities: true,
+              synchronize: true,
+            }
+          : {
+              type: 'postgres' as const,
+              host: config.get<string>('DB_HOST', 'localhost'),
+              port: Number(config.get<string>('DB_PORT', '5432')),
+              username: config.get<string>('DB_USER', 'postgres'),
+              password: config.get<string>('DB_PASSWORD', 'postgres'),
+              database: config.get<string>('DB_NAME', 'antifreeze_db'),
+              autoLoadEntities: true,
+              // shortcut: 개발용 자동 스키마 동기화, 운영 전에 마이그레이션으로 교체
+              synchronize: true,
+            },
     }),
     UsersModule,
     WeightsModule,

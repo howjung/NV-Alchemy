@@ -25,6 +25,16 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## 로컬 실행 (Postgres 없이)
+
+```bash
+npm install
+cp .env.example .env     # DB_TYPE=sqljs 이면 로컬 파일 dev.sqlite를 쓴다
+npm run start:dev        # http://localhost:3000
+```
+
+Postgres를 쓰려면 `.env`에서 `DB_TYPE` 줄을 지우고 `DB_*` 값을 채운다. 사진 분석(`POST /meals/upload`)만 `GEMINI_API_KEY`가 필요하다.
+
 ## Project setup
 
 ```bash
