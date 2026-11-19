@@ -52,6 +52,12 @@ const _products = <_Product>[
   ),
 ];
 
+const _sellers = <({String name, String shipping, int extra})>[
+  (name: '식단공방', shipping: '무료배송', extra: 0),
+  (name: '오늘한끼', shipping: '무료배송', extra: 1000),
+  (name: '푸드랩 마켓', shipping: '배송비 2,500원', extra: 2800),
+];
+
 String _won(int value) =>
     '${value.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',')}원';
 
@@ -109,6 +115,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
       (_subtotal < _balance ? _subtotal : _balance) ~/ 100 * 100;
 
   void _open(ShoppingView view) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     setState(() => _view = view);
     widget.onViewChanged?.call(view);
   }
@@ -202,15 +209,35 @@ class _ShoppingTabState extends State<ShoppingTab> {
                             ),
                           ),
                         ),
-                        IconButton.outlined(
+                        AppMenu<String>(
                           tooltip: '장바구니',
-                          onPressed: () => _open(ShoppingView.cart),
-                          icon: Badge(
-                            isLabelVisible: _count > 0,
-                            label: Text('$_count'),
-                            child: const Icon(
-                              Icons.shopping_bag_outlined,
-                              color: _green,
+                          width: _cart.isEmpty ? 240 : 310,
+                          offset: Offset(_cart.isEmpty ? -192 : -262, 0),
+                          selected: 'view',
+                          items: [
+                            if (_cart.isEmpty)
+                              const AppMenuItem('empty', '장바구니가 비어 있어요')
+                            else ...[
+                              for (final item in _cart.entries)
+                                AppMenuItem('item', _products[item.key].name),
+                              AppMenuItem('total', '합계 ${_won(_subtotal)}'),
+                              const AppMenuItem('view', '장바구니 보기 ›'),
+                            ],
+                          ],
+                          onSelected: (value) {
+                            if (value != 'empty') _open(ShoppingView.cart);
+                          },
+                          child: IgnorePointer(
+                            child: IconButton.outlined(
+                              onPressed: () {},
+                              icon: Badge(
+                                isLabelVisible: _count > 0,
+                                label: Text('$_count'),
+                                child: const Icon(
+                                  Icons.shopping_bag_outlined,
+                                  color: _green,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -393,70 +420,73 @@ class _ShoppingTabState extends State<ShoppingTab> {
     final product = _products[index];
     final expanded = _compared.contains(index);
     return _panel([
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              _thumb(index, 92),
-              Positioned(
-                left: 3,
-                top: 3,
-                child: Material(
-                  color: Colors.white,
-                  shape: const CircleBorder(),
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => setState(() {
-                      if (!_favorites.add(index)) _favorites.remove(index);
-                    }),
-                    child: Padding(
-                      padding: const EdgeInsets.all(5),
-                      child: Icon(
-                        _favorites.contains(index)
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                        size: 15,
-                        color: _muted,
+      InkWell(
+        onTap: () => _productSheet(index),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                _thumb(index, 92),
+                Positioned(
+                  left: 3,
+                  top: 3,
+                  child: Material(
+                    color: Colors.white,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => setState(() {
+                        if (!_favorites.add(index)) _favorites.remove(index);
+                      }),
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: Icon(
+                          _favorites.contains(index)
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          size: 15,
+                          color: _muted,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 5,
-                  runSpacing: 4,
-                  children: [_tag(product.category), _tag('AI 추천', ai: true)],
-                ),
-                const SizedBox(height: 5),
-                Text(product.name, style: _bold),
-                Text(product.nutrition, style: _caption),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    Text(
-                      'AI 적합도 ${product.score}%',
-                      style: const TextStyle(
-                        color: _ai,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: _bar(product.score / 100, _ai)),
-                  ],
-                ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 5,
+                    runSpacing: 4,
+                    children: [_tag(product.category), _tag('AI 추천', ai: true)],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(product.name, style: _bold),
+                  Text(product.nutrition, style: _caption),
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      Text(
+                        'AI 적합도 ${product.score}%',
+                        style: const TextStyle(
+                          color: _ai,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: _bar(product.score / 100, _ai)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
       const SizedBox(height: 14),
       const Text('최저가 (배송비 포함)', style: _caption),
@@ -669,11 +699,14 @@ class _ShoppingTabState extends State<ShoppingTab> {
           _pair('최종 결제 금액', _won(_subtotal - _points), strong: true),
         ]),
       ),
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        value: _agreed,
-        onChanged: (value) => setState(() => _agreed = value ?? false),
-        title: const Text('주문 내용을 확인했고 결제에 동의해요.'),
+      Material(
+        type: MaterialType.transparency,
+        child: CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _agreed,
+          onChanged: (value) => setState(() => _agreed = value ?? false),
+          title: const Text('주문 내용을 확인했고 결제에 동의해요.'),
+        ),
       ),
     ],
     action: _button(
@@ -685,25 +718,108 @@ class _ShoppingTabState extends State<ShoppingTab> {
   Future<void> _pickPoints() async {
     final value = await showModalBottomSheet<int>(
       context: context,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const ListTile(title: Text('포인트 사용', style: _bold)),
-            for (final value in [
-              0,
-              for (var points = 500; points <= _pointLimit; points += 100)
-                points,
-            ])
-              ListTile(
-                title: Text(value == 0 ? '사용 안 함' : '$value P'),
-                onTap: () => Navigator.pop(context, value),
-              ),
-          ],
-        ),
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _PointSheet(
+        balance: _balance,
+        limit: _pointLimit,
+        initial: _points > 0 ? _points : (_pointLimit >= 500 ? 500 : 0),
       ),
     );
     if (mounted && value != null) setState(() => _points = value);
+  }
+
+  Future<void> _productSheet(int index) {
+    final product = _products[index];
+    final sellers = _sellers.take(index == 3 ? 2 : 3).toList();
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                product.name,
+                style: const TextStyle(
+                  color: _green,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${product.category} · ${product.nutrition}',
+                style: _caption,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'AI 적합도 ${product.score}%',
+                style: const TextStyle(
+                  color: _ai,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final seller in sellers)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: _pair(
+                    '${seller.name} · ${seller.shipping}',
+                    _won(product.price + seller.extra),
+                    strong: true,
+                  ),
+                ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 100,
+                    height: 48,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _chip,
+                        foregroundColor: _green,
+                        padding: EdgeInsets.zero,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _subscriptionPage(index);
+                      },
+                      child: const Text('정기 배송'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 100,
+                    height: 48,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(padding: EdgeInsets.zero),
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _change(index, (_cart[index] ?? 0) + 1);
+                        _toast('장바구니에 담았어요');
+                      },
+                      child: const Text('장바구니 담기'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _placeOrder() => setState(() {
@@ -1198,5 +1314,194 @@ class _Macro extends StatelessWidget {
         ),
       ),
     ],
+  );
+}
+
+class _PointSheet extends StatefulWidget {
+  const _PointSheet({
+    required this.balance,
+    required this.limit,
+    required this.initial,
+  });
+  final int balance;
+  final int limit;
+  final int initial;
+
+  @override
+  State<_PointSheet> createState() => _PointSheetState();
+}
+
+class _PointSheetState extends State<_PointSheet> {
+  late int _value = widget.initial;
+
+  // 사용 가능한 값: 0(사용 안 함) 또는 500P 이상 100P 단위, 최대 limit.
+  int _fit(int value) {
+    if (widget.limit < 500 || value <= 0) return 0;
+    if (value < 500) return 500;
+    return value > widget.limit ? widget.limit : value;
+  }
+
+  void _set(int value) => setState(() => _value = _fit(value));
+
+  String _p(int value) => _won(value).replaceFirst('원', 'P');
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppTheme.border,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '포인트 사용',
+                  style: TextStyle(
+                    color: _green,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: '닫기',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: _green),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              const Expanded(child: Text('보유 포인트', style: _caption)),
+              Text(_p(widget.balance), style: _bold),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+            decoration: BoxDecoration(
+              color: _chip.withValues(alpha: .6),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              children: [
+                _round(
+                  Icons.remove,
+                  '포인트 줄이기',
+                  _value > 0
+                      ? () => _set(_value <= 500 ? 0 : _value - 100)
+                      : null,
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text.rich(
+                      TextSpan(
+                        text: '$_value',
+                        style: const TextStyle(
+                          color: _green,
+                          fontSize: 40,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        children: const [
+                          TextSpan(
+                            text: '  P',
+                            style: TextStyle(
+                              color: _muted,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _round(
+                  Icons.add,
+                  '포인트 늘리기',
+                  _value < widget.limit
+                      ? () => _set(_value < 500 ? 500 : _value + 100)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _quick('+500', () => _set(_value + 500)),
+              const SizedBox(width: 8),
+              _quick('+1,000', () => _set(_value + 1000)),
+              const SizedBox(width: 8),
+              _quick('전액 사용', () => _set(widget.limit)),
+            ],
+          ),
+          const Divider(height: 32, color: AppTheme.border),
+          Row(
+            children: [
+              const Expanded(child: Text('사용 후 남는 포인트', style: _caption)),
+              Text(_p(widget.balance - _value), style: _bold),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '결제 금액에서 ${_won(_value)}이 빠져요.',
+            style: const TextStyle(color: Color(0xFF11836C), fontSize: 13),
+          ),
+          const SizedBox(height: 18),
+          const Text('500P부터 100P 단위로 쓸 수 있고, 결제 금액까지 사용해요.', style: _caption),
+          const SizedBox(height: 4),
+          const Text('주문을 취소하면 사용한 포인트는 되돌려 드려요.', style: _caption),
+          const SizedBox(height: 22),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, _value),
+              child: Text(_value == 0 ? '사용 안 함' : '${_p(_value)} 사용하기'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _round(IconData icon, String tooltip, VoidCallback? onPressed) =>
+      IconButton.filled(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        style: IconButton.styleFrom(
+          fixedSize: const Size(44, 44),
+          backgroundColor: _chip,
+          foregroundColor: _green,
+        ),
+        icon: Icon(icon),
+      );
+
+  Widget _quick(String label, VoidCallback onPressed) => Expanded(
+    child: SizedBox(
+      height: 44,
+      child: FilledButton(
+        onPressed: widget.limit < 500 ? null : onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: _chip,
+          foregroundColor: _green,
+          padding: EdgeInsets.zero,
+        ),
+        child: Text(label, style: _bold),
+      ),
+    ),
   );
 }
