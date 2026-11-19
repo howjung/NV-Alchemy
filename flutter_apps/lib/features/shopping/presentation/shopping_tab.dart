@@ -58,6 +58,8 @@ const _sellers = <({String name, String shipping, int extra})>[
   (name: '푸드랩 마켓', shipping: '배송비 2,500원', extra: 2800),
 ];
 
+const _suggestions = ['닭가슴살 샐러드', '곤약밥 밀키트', '그릭요거트', '현미 도시락'];
+
 String _won(int value) =>
     '${value.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',')}원';
 
@@ -82,7 +84,8 @@ class _ShoppingTabState extends State<ShoppingTab> {
   final _cart = <int, int>{};
   final _compared = <int>{};
   final _favorites = <int>{};
-  final _orders = <({Map<int, int> items, int total, int points})>[];
+  final _orders =
+      <({Map<int, int> items, int total, int points, String payment})>[];
   late ShoppingView _view = widget.initialView;
   String _query = '';
   String _category = '전체 상품';
@@ -182,9 +185,13 @@ class _ShoppingTabState extends State<ShoppingTab> {
       for (var index = 0; index < _products.length; index++)
         if ((_category == '전체 상품' || _category == _products[index].category) &&
             (!_fit || _products[index].score >= 90) &&
-            '${_products[index].name} ${_products[index].category}'.contains(
-              _query.trim(),
-            ))
+            _query
+                .trim()
+                .split(RegExp(r'\s+'))
+                .every(
+                  '${_products[index].name} ${_products[index].category}'
+                      .contains,
+                ))
           index,
     ];
     if (_sort == '낮은 가격순') {
@@ -251,17 +258,92 @@ class _ShoppingTabState extends State<ShoppingTab> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    TextField(
-                      onChanged: (value) => setState(() => _query = value),
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.search, color: _muted),
-                        hintText: '밀키트, 도시락, 샐러드 검색',
-                        fillColor: _chip,
-                        isDense: true,
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(13),
-                          borderSide: BorderSide.none,
-                        ),
+                    LayoutBuilder(
+                      builder: (context, box) => RawAutocomplete<String>(
+                        optionsBuilder: (value) =>
+                            value.text.isEmpty ? _suggestions : const [],
+                        onSelected: (value) => setState(() => _query = value),
+                        fieldViewBuilder:
+                            (context, controller, focusNode, onSubmitted) =>
+                                TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  onChanged: (value) =>
+                                      setState(() => _query = value),
+                                  decoration: InputDecoration(
+                                    prefixIcon: const Icon(
+                                      Icons.search,
+                                      color: _muted,
+                                    ),
+                                    hintText: '밀키트, 도시락, 샐러드 검색',
+                                    fillColor: _chip,
+                                    isDense: true,
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(13),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                ),
+                        optionsViewBuilder: (context, onSelected, options) =>
+                            Align(
+                              alignment: Alignment.topLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Material(
+                                  color: Colors.white,
+                                  clipBehavior: Clip.antiAlias,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    side: const BorderSide(
+                                      color: AppTheme.border,
+                                    ),
+                                  ),
+                                  child: SizedBox(
+                                    width: box.maxWidth,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Padding(
+                                          padding: EdgeInsets.fromLTRB(
+                                            16,
+                                            12,
+                                            16,
+                                            4,
+                                          ),
+                                          child: Text(
+                                            '추천 검색어',
+                                            style: _caption,
+                                          ),
+                                        ),
+                                        for (final option in options)
+                                          InkWell(
+                                            onTap: () => onSelected(option),
+                                            child: Container(
+                                              height: 44,
+                                              alignment: Alignment.centerLeft,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                  ),
+                                              child: Text(
+                                                option,
+                                                style: const TextStyle(
+                                                  color: _green,
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        const SizedBox(height: 6),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                       ),
                     ),
                   ],
@@ -876,6 +958,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
       items: Map.of(_cart),
       total: _subtotal - _points,
       points: _points,
+      payment: _payment,
     ));
     _balance -= _points;
     _cart.clear();
@@ -906,7 +989,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
             const Divider(color: AppTheme.border),
             _pair('사용 포인트', '${_orders.first.points}P'),
             _pair('결제 금액', _won(_orders.first.total), strong: true),
-            const Text('등록한 카드 ···· 1234', style: _caption),
+            Text(_orders.first.payment, style: _caption),
           ]),
         const SizedBox(height: 18),
         _button('주문 내역 보기', () => _open(ShoppingView.orders)),
@@ -916,75 +999,191 @@ class _ShoppingTabState extends State<ShoppingTab> {
         ),
       ]);
 
-  Widget _history() =>
-      _page('주문 · 구독 내역', '쇼핑', () => _open(ShoppingView.catalog), [
-        _section(
-          '정기 구독',
-          _panel([
-            if (_subscription case final index?)
-              ListTile(
+  Widget _history() => _page(
+    '주문 · 구독 내역',
+    '쇼핑',
+    () => _open(ShoppingView.catalog),
+    [
+      _section(
+        '정기 구독',
+        _panel([
+          if (_subscription case final index?)
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(_products[index].name),
                 subtitle: Text('$_cycle $_day요일 · $_quantity개 · 건너뛰기 $_skips회'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _subscriptionPage(index, managing: true),
-              )
-            else
-              const Text('진행 중인 정기 구독이 없어요.', style: _caption),
-          ]),
-        ),
-        _section(
-          '주문 내역',
-          _panel([
-            if (_orders.isEmpty) const Text('주문 내역이 없어요.', style: _caption),
-            for (final order in _orders)
-              ListTile(
+              ),
+            )
+          else
+            const Text('진행 중인 정기 구독이 없어요.', style: _caption),
+        ]),
+      ),
+      _section(
+        '주문 내역',
+        _panel([
+          if (_orders.isEmpty) const Text('주문 내역이 없어요.', style: _caption),
+          for (final order in _orders)
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(_orderName(order.items)),
                 subtitle: const Text('결제 완료'),
                 trailing: Text(_won(order.total), style: _bold),
-                onTap: () => _detail(order.items, order.total, order.points),
+                onTap: () => _detail(order),
               ),
-          ]),
-        ),
-      ]);
+            ),
+        ]),
+      ),
+    ],
+  );
 
-  void _detail(Map<int, int> items, int total, int points) =>
-      Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (context) => Scaffold(
-            backgroundColor: _mint,
-            body: _page('주문 상세', '내역', () => Navigator.pop(context), [
-              _section(
-                '주문 상품',
-                _panel([
-                  for (final item in items.entries)
-                    _pair(_products[item.key].name, '${item.value}개'),
-                ]),
+  // 예시 주문일(앱의 기준 날짜)과 도착 예정일. 서버 연동 전 고정값.
+  void _detail(
+    ({Map<int, int> items, int total, int points, String payment}) order,
+  ) => Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (context) => Scaffold(
+        backgroundColor: _mint,
+        body: _page('주문 상세', '내역', () => Navigator.pop(context), [
+          _panel([
+            Text(
+              _orderName(order.items),
+              style: const TextStyle(
+                color: _green,
+                fontWeight: FontWeight.w700,
               ),
-              _section(
-                '배송 상태',
-                _panel([
-                  const Text('배송 준비 중', style: _bold),
-                  const Text('주문 완료 → 배송 시작 → 배송 완료', style: _caption),
-                ]),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '2026.10.21 주문 · ${order.items.values.fold(0, (a, b) => a + b)}개',
+              style: _caption,
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '배송 상태',
+                    style: TextStyle(
+                      color: _green,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Text(
+                  '배송 준비 중',
+                  style: TextStyle(
+                    color: Color(0xFF2B8A9C),
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _panel([
+            _steps(0),
+            const Divider(height: 28, color: AppTheme.border),
+            _timeline('2026.10.21', '주문 완료'),
+            const SizedBox(height: 10),
+            _timeline('10.22 (목)', '도착 예정'),
+          ]),
+          const SizedBox(height: 12),
+          _section(
+            '배송지',
+            _panel([const Text('경기도 성남시 수정구 ○○로 123\n101동 1001호 (홍길동)')]),
+          ),
+          _section(
+            '결제 정보',
+            _panel([
+              _pair('상품 금액', _won(order.total + order.points)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('포인트 사용', style: TextStyle(color: _muted)),
+                  ),
+                  Text(
+                    '-${_won(order.points)}',
+                    style: const TextStyle(
+                      color: Color(0xFF2B8A9C),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-              _section(
-                '배송지',
-                _panel([const Text('경기도 성남시 수정구 ○○로 123\n101동 1001호 (홍길동)')]),
+              const Divider(height: 24, color: AppTheme.border),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Expanded(child: Text('결제 금액', style: _bold)),
+                  Text(
+                    _won(order.total),
+                    style: const TextStyle(
+                      color: _green,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-              _section(
-                '결제 정보',
-                _panel([
-                  _pair('상품 금액', _won(total + points)),
-                  _pair('포인트 사용', '-${_won(points)}'),
-                  _pair('결제 금액', _won(total), strong: true),
-                ]),
-              ),
+              const SizedBox(height: 10),
+              Text(order.payment, style: _caption),
+              const SizedBox(height: 4),
+              Text('사용한 포인트 ${order.points}P', style: _caption),
             ]),
           ),
-        ),
-      );
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 56,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFB54E45),
+                side: const BorderSide(color: Color(0xFFE3B7B2)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () => _cancelOrder(context, order),
+              child: const Text('주문 취소 요청', style: _bold),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text('신선식품은 상품에 문제가 있을 때만 환불할 수 있어요.', style: _caption),
+          const SizedBox(height: 6),
+          const Text('주문을 취소하면 사용한 포인트는 되돌려 드려요.', style: _caption),
+        ]),
+      ),
+    ),
+  );
+
+  Future<void> _cancelOrder(
+    BuildContext detailContext,
+    ({Map<int, int> items, int total, int points, String payment}) order,
+  ) async {
+    final confirmed = await showConfirmPopup(
+      detailContext,
+      title: '주문을 취소할까요?',
+      message: '사용한 포인트는 되돌려 드려요.',
+      confirmLabel: '주문 취소',
+    );
+    if (!confirmed || !mounted || !detailContext.mounted) return;
+    setState(() {
+      _orders.remove(order);
+      _balance += order.points;
+    });
+    Navigator.pop(detailContext);
+    _toast('주문을 취소했어요');
+  }
 
   Future<void> _subscriptionPage(int index, {bool managing = false}) async {
     final product = _products[index];
@@ -1353,6 +1552,62 @@ Widget _menuLabel(
     ),
   );
 }
+
+Widget _steps(int current) => LayoutBuilder(
+  builder: (context, box) {
+    final w = box.maxWidth;
+    const labels = ['주문 완료', '배송 시작', '배송 완료'];
+    return SizedBox(
+      height: 48,
+      child: Stack(
+        children: [
+          for (var i = 0; i < 2; i++)
+            Positioned(
+              left: w / 6 + i * w / 3,
+              top: 5,
+              width: w / 3,
+              height: 4,
+              child: ColoredBox(color: i < current ? _cyan : AppTheme.border),
+            ),
+          for (var i = 0; i < 3; i++)
+            Positioned(
+              left: i * w / 3,
+              top: 0,
+              width: w / 3,
+              child: Column(
+                children: [
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i <= current ? _cyan : Colors.white,
+                      border: Border.all(color: _cyan, width: 2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    labels[i],
+                    style: TextStyle(
+                      color: i <= current ? _green : _muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  },
+);
+
+Widget _timeline(String date, String label) => Row(
+  children: [
+    SizedBox(width: 84, child: Text(date, style: _caption)),
+    Text(label, style: const TextStyle(color: _green)),
+  ],
+);
 
 Widget _bar(double value, Color color) => LinearProgressIndicator(
   value: value,

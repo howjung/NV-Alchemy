@@ -32,7 +32,7 @@ Antifreeze Flutter 프론트엔드를 두 명 이상이 함께 작업하기 위�
 | 소셜 탭 | 소셜 담당 | `features/social/presentation/*`, `core/widgets/app_overlays.dart` |
 | 홈·기록 | 홈·기록 담당 | `features/home/presentation/*`, `features/records/presentation/*` |
 | 쇼핑 | 소셜 담당(작업 중) | `features/shopping/presentation/*` |
-| 프로필 | 아직 지정 전 | `features/profile/presentation/*` |
+| 프로필 | 소셜 담당(작업 예정) | `features/profile/presentation/*` |
 
 - 다른 사람 영역의 파일을 고쳐야 하면 **먼저 그 사람에게 알린다.**
 - 공용 파일(`core/theme/app_theme.dart`, `core/navigation/app_routes.dart` 등)을 고칠 때도 먼저 알린다.

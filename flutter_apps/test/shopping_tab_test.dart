@@ -194,4 +194,70 @@ void main() {
     final bar = tester.getRect(find.text('장바구니 보기'));
     expect(toast.bottom, lessThan(bar.top));
   });
+
+  testWidgets('search suggestions fill the field and filter by words', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    expect(find.text('추천 검색어'), findsOneWidget);
+    for (final word in ['닭가슴살 샐러드', '곤약밥 밀키트', '그릭요거트', '현미 도시락']) {
+      expect(find.text(word), findsOneWidget);
+    }
+
+    await tester.tap(find.text('곤약밥 밀키트'));
+    await tester.pumpAndSettle();
+    expect(find.text('추천 검색어'), findsNothing);
+    expect(find.text('상품 1개'), findsOneWidget);
+    expect(find.text('곤약밥 소불고기 밀키트 2인'), findsOneWidget);
+  });
+
+  testWidgets('order detail shows Figma sections; cancel refunds points', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await tester.tap(find.text('장바구니 담기').first);
+    await tester.pump(const Duration(seconds: 3));
+    await _openCart(tester);
+    await tester.tap(find.text('6,900원 주문하기'));
+    await tester.pumpAndSettle();
+
+    // 포인트 2,500P 전액 사용 -> 결제 4,400원.
+    await tester.tap(find.text('전액 사용'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('4,400원 결제하기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('주문 내역 보기'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('수비드 닭가슴살 샐러드'));
+    await tester.pumpAndSettle();
+    expect(find.text('주문 상세'), findsOneWidget);
+    expect(find.text('2026.10.21 주문 · 1개'), findsOneWidget);
+    expect(find.text('배송 준비 중'), findsOneWidget);
+    expect(find.text('도착 예정'), findsOneWidget);
+    expect(find.text('-2,500원'), findsOneWidget);
+    expect(find.text('사용한 포인트 2500P'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('주문 취소 요청'));
+    await tester.tap(find.text('주문 취소 요청'));
+    await tester.pumpAndSettle();
+    expect(find.text('주문을 취소할까요?'), findsOneWidget);
+    await tester.tap(find.text('취소'));
+    await tester.pumpAndSettle();
+    expect(find.text('주문 상세'), findsOneWidget);
+
+    await tester.tap(find.text('주문 취소 요청'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '주문 취소'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('주문 내역이 없어요.'), findsOneWidget);
+    expect(find.text('주문을 취소했어요'), findsOneWidget);
+  });
 }
