@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
@@ -44,11 +45,38 @@ class WeightRecordSheet extends StatefulWidget {
 }
 
 class _WeightRecordSheetState extends State<WeightRecordSheet> {
-  late int _tenths = (widget.weight * 10).round();
+  late final _controller = TextEditingController(
+    text: widget.weight.toStringAsFixed(1),
+  );
+
+  double? get _weight {
+    final value = double.tryParse(_controller.text.replaceAll(',', '.'));
+    return value != null && value >= 0.1 && value <= 500 ? value : null;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _adjust(int amount) {
+    final tenths = (((_weight ?? widget.weight) * 10).round() + amount).clamp(
+      1,
+      5000,
+    );
+    setState(() {
+      _controller.text = (tenths / 10).toStringAsFixed(1);
+      _controller.selection = TextSelection.collapsed(
+        offset: _controller.text.length,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final difference = _tenths - 685;
+    final weight = _weight;
+    final difference = weight == null ? null : weight - 68.5;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -70,41 +98,74 @@ class _WeightRecordSheetState extends State<WeightRecordSheet> {
             children: [
               Row(
                 children: [
-                  _step(Icons.remove, '체중 줄이기', _tenths > 1 ? -1 : null),
+                  _step(Icons.remove, '체중 줄이기', -1),
                   Expanded(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text.rich(
-                        TextSpan(
-                          style: const TextStyle(color: AppTheme.primary),
-                          children: [
-                            TextSpan(
-                              text: (_tenths / 10).toStringAsFixed(1),
-                              style: const TextStyle(
-                                fontSize: 52,
-                                fontWeight: FontWeight.bold,
-                              ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Flexible(
+                          child: TextField(
+                            controller: _controller,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
                             ),
-                            const TextSpan(
-                              text: ' kg',
-                              style: TextStyle(fontSize: 14),
+                            inputFormatters: [
+                              TextInputFormatter.withFunction((
+                                oldValue,
+                                newValue,
+                              ) {
+                                return RegExp(r'^\d{0,3}([.,]\d?)?$')
+                                        .hasMatch(newValue.text)
+                                    ? newValue
+                                    : oldValue;
+                              }),
+                            ],
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: AppTheme.primary,
+                              fontSize: 52,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ],
+                            decoration: const InputDecoration(
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                              isDense: true,
+                            ),
+                            onTap: () => _controller.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: _controller.text.length,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                            onSubmitted: (_) =>
+                                FocusScope.of(context).unfocus(),
+                          ),
                         ),
-                      ),
+                        const Text('kg', style: TextStyle(fontSize: 14)),
+                        const SizedBox(width: 8),
+                      ],
                     ),
                   ),
-                  _step(Icons.add, '체중 늘리기', _tenths < 5000 ? 1 : null),
+                  _step(Icons.add, '체중 늘리기', 1),
                 ],
               ),
               const SizedBox(height: 6),
-              if (widget.date == null)
+              if (widget.date == null && difference != null)
                 Text(
-                  '어제보다 ${difference > 0 ? '+' : ''}${(difference / 10).toStringAsFixed(1)}kg',
+                  '어제보다 ${difference > 0 ? '+' : ''}${difference.toStringAsFixed(1)}kg',
                   style: const TextStyle(
                     color: AppTheme.accent,
                     fontWeight: FontWeight.bold,
                   ),
+                ),
+              if (weight == null)
+                const Text(
+                  '0.1~500kg 사이의 체중을 입력해 주세요.',
+                  style: TextStyle(color: Colors.red, fontSize: 12),
                 ),
             ],
           ),
@@ -114,18 +175,23 @@ class _WeightRecordSheetState extends State<WeightRecordSheet> {
         const SizedBox(height: 30),
         PrimaryButton(
           label: '저장',
-          onPressed: () => Navigator.pop(context, _tenths / 10),
+          onPressed: () {
+            if (weight == null) return;
+            Navigator.pop(context, (weight * 10).round() / 10);
+          },
         ),
       ],
     );
   }
 
-  Widget _step(IconData icon, String label, int? amount) =>
+  Widget _step(IconData icon, String label, int amount) =>
       IconButton.filledTonal(
         tooltip: label,
-        onPressed: amount == null
-            ? null
-            : () => setState(() => _tenths += amount),
+        style: IconButton.styleFrom(
+          backgroundColor: const Color(0xFFCDE8DF),
+          foregroundColor: AppTheme.primary,
+        ),
+        onPressed: () => _adjust(amount),
         icon: Icon(icon),
       );
 }
