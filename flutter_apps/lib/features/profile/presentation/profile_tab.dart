@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/state/body_metrics.dart';
 import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_overlays.dart';
@@ -393,7 +394,8 @@ class _ProfileTabState extends State<ProfileTab> {
         for (var i = 0; i < _addresses.length; i++) ...[
           _menu([
             _row(
-              '${_addresses[i][0]}${i == 0 ? ' · 기본' : ''}',
+              _addresses[i][0],
+              badge: i == 0 ? '기본' : null,
               () => _editAddress(context, refresh, i),
               subtitle:
                   '${_addresses[i][3]} ${_addresses[i][4]}\n${_addresses[i][1]} · ${_addresses[i][2]}',
@@ -464,7 +466,11 @@ class _ProfileTabState extends State<ProfileTab> {
       ]),
       ProfileView.blocked => _page(context, '차단한 사용자', [
         const SizedBox(height: 28),
-        _panel([const Center(child: Text('차단한 사용자가 없어요.'))]),
+        _panel([
+          const Icon(Icons.group_outlined, color: _muted, size: 28),
+          const SizedBox(height: 8),
+          const Center(child: Text('차단한 사용자가 없어요.')),
+        ]),
         const SizedBox(height: 12),
         const Center(
           child: Text('차단을 해제하면 그 사용자의 게시물과 댓글이 다시 보여요.', style: _small),
@@ -487,166 +493,399 @@ class _ProfileTabState extends State<ProfileTab> {
     };
   }
 
-  Widget _metrics(BuildContext context, StateSetter refresh) => _page(
-    context,
-    '프로필',
-    [
-      Row(
-        children: [
-          _avatar(36),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _metrics(BuildContext context, StateSetter refresh) {
+    final gap = goalGap;
+    final remaining = numText(double.parse(gap.remaining.toStringAsFixed(1)));
+    // 시연 기준일(홈과 같은 10월 21일)에서 주 0.5kg 속도로 계산한다.
+    final weeks = (gap.remaining / .5).ceil();
+    final reach = DateTime(2026, 10, 21).add(Duration(days: weeks * 7));
+    final macros = macroGoals;
+    final energy = [macros.carbs * 4, macros.protein * 4, macros.fat * 9];
+    final total = energy.fold(0, (a, b) => a + b);
+    final kcal = calorieGoal;
+    return _page(
+      context,
+      '프로필',
+      [
+        Row(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
               children: [
-                Text(_name, style: _strong.copyWith(fontSize: 22)),
-                const Text(_email, style: _small),
-                Text(
-                  '만 $_age세 · $_gender · $_height'
-                  'cm',
-                  style: _small,
+                _avatar(36),
+                Positioned(
+                  right: -4,
+                  bottom: -4,
+                  child: GestureDetector(
+                    onTap: () => _toast(context, '프로필 사진 변경은 준비 중이에요'),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: _blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFFF3F8F7),
+                          width: 3,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.photo_camera,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 26),
-      const Text(
-        '목표 진행',
-        style: TextStyle(
-          color: _green,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      const SizedBox(height: 9),
-      _panel([
-        Row(
-          children: [
+            const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                '${((double.tryParse(userProfile['weight']!) ?? 74) - (double.tryParse(_goal) ?? 68)).abs().toStringAsFixed(1)}kg 남음',
-                style: _strong.copyWith(fontSize: 24),
-              ),
-            ),
-            const Text(
-              '35%',
-              style: TextStyle(
-                color: AppTheme.accent,
-                fontWeight: FontWeight.bold,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_name, style: _strong.copyWith(fontSize: 22)),
+                  const Text(_email, style: _small),
+                  Text('만 $_age세 · $_gender · ${_height}cm', style: _small),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        LinearProgressIndicator(
-          value: .35,
-          color: _blue,
-          backgroundColor: AppTheme.border,
-          borderRadius: BorderRadius.circular(5),
-          minHeight: 6,
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('시작 77.3kg', style: _small),
-            Text('현재 ${userProfile['weight']}kg', style: _small),
-            Text(
-              '목표 $_goal'
-              'kg',
-              style: _small,
-            ),
-          ],
-        ),
-        const Divider(color: AppTheme.border),
+        const SizedBox(height: 26),
         const Text(
-          '권장 속도(주 0.5kg)로 가면 약 12주 뒤 · 1월 5일 전후에 도달해요.',
-          style: _small,
-        ),
-      ]),
-      const SizedBox(height: 30),
-      const Text(
-        '나의 신체 지표',
-        style: TextStyle(
-          color: _green,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      const SizedBox(height: 9),
-      _panel([
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('BMI', style: _small),
-            Text('과체중', style: _small),
-          ],
-        ),
-        const Text(
-          '24.2',
+          '목표 진행',
           style: TextStyle(
             color: _green,
-            fontSize: 28,
+            fontSize: 20,
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: .55,
-          color: const Color(0xFF99D6E1),
-          backgroundColor: AppTheme.border,
-          borderRadius: BorderRadius.circular(4),
-          minHeight: 8,
+        const SizedBox(height: 9),
+        _panel([
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(
+                child: gap.remaining == 0
+                    ? Text('목표 달성', style: _strong.copyWith(fontSize: 26))
+                    : Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${remaining}kg ',
+                              style: _strong.copyWith(fontSize: 26),
+                            ),
+                            TextSpan(
+                              text: '${gap.verb} 남음',
+                              style: const TextStyle(
+                                color: _muted,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+              Text(
+                '${(goalProgress * 100).round()}%',
+                style: const TextStyle(
+                  color: AppTheme.accent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: goalProgress,
+            color: _blue,
+            backgroundColor: AppTheme.border,
+            borderRadius: BorderRadius.circular(5),
+            minHeight: 6,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _labelValue('시작 ', '${userProfile['startWeight']}kg'),
+              _labelValue('현재 ', '${userProfile['weight']}kg'),
+              _labelValue('목표 ', '${_goal}kg'),
+            ],
+          ),
+          const Divider(color: AppTheme.border),
+          if (gap.remaining > 0)
+            Text.rich(
+              TextSpan(
+                style: _small,
+                children: [
+                  const TextSpan(text: '권장 속도(주 0.5kg)로 가면 약 '),
+                  TextSpan(
+                    text: '$weeks주 뒤 · ${reach.month}월 ${reach.day}일',
+                    style: const TextStyle(
+                      color: _green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const TextSpan(text: ' 전후에 도달해요.'),
+                ],
+              ),
+            )
+          else
+            const Text('목표 체중에 도달했어요.', style: _small),
+        ]),
+        const SizedBox(height: 30),
+        const Text(
+          '나의 신체 지표',
+          style: TextStyle(
+            color: _green,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
         ),
-        const SizedBox(height: 8),
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+        const SizedBox(height: 9),
+        _panel([
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('BMI', style: _small),
+              Text(bmiLabel, style: _small),
+            ],
+          ),
+          Text(
+            bmi.toStringAsFixed(1),
+            style: const TextStyle(
+              color: _green,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _bmiScale(),
+          const SizedBox(height: 6),
+          const Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '저체중',
+                  style: _bmiLegend,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  '정상 18.5~23',
+                  style: _bmiLegend,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  '과체중 23~',
+                  style: _bmiLegend,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('저체중', style: _small),
-            Text('정상 18.5~23', style: _small),
-            Text('과체중 23~', style: _small),
+            Expanded(
+              child: _metricCard(
+                '기초대사량',
+                _thousands(bmr),
+                'kcal',
+                '가만히 있어도 쓰는 에너지',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _metricCard(
+                '하루 목표 칼로리',
+                _thousands(kcal),
+                'kcal',
+                '활동량 $_activity 기준',
+              ),
+            ),
           ],
         ),
-      ]),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _panel([_stat('기초대사량', '1,714 kcal')])),
-          const SizedBox(width: 10),
-          Expanded(child: _panel([_stat('하루 목표 칼로리', '$_calories kcal')])),
-        ],
-      ),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _panel([_stat('하루 물 권장량', '2.2 L')])),
-          const SizedBox(width: 10),
-          Expanded(child: _panel([_stat('최근 7일 평균 섭취', '677 kcal')])),
-        ],
-      ),
-      _group('하루 권장 영양', [
-        const ListTile(title: Text('탄수화물'), trailing: Text('256g')),
-        const ListTile(title: Text('단백질'), trailing: Text('128g')),
-        const ListTile(title: Text('지방'), trailing: Text('64g')),
-      ]),
-      const SizedBox(height: 12),
-      const Text('모든 수치는 입력한 정보로 계산한 참고값이에요.', style: _small),
-      const SizedBox(height: 14),
-      _menu([
-        _row(
-          '정보 수정',
-          () => _editMetrics(context, refresh),
-          subtitle: '닉네임 · 신체 정보 · 활동량 · 목표 칼로리',
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _metricCard(
+                '하루 물 권장량',
+                waterLiters.toStringAsFixed(1),
+                'L',
+                '체중 1kg당 30ml',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _metricCard(
+                '최근 7일 평균 섭취',
+                '677',
+                'kcal',
+                '기록한 7일 기준 · 목표 대비\n${_thousands(677 - kcal)}',
+              ),
+            ),
+          ],
         ),
-      ]),
-    ],
-    trailing: TextButton(
-      onPressed: () => _editMetrics(context, refresh),
-      child: const Text('편집'),
-    ),
-  );
+        const SizedBox(height: 22),
+        const Text(
+          '하루 권장 영양',
+          style: TextStyle(
+            color: _green,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 9),
+        _panel([
+          Row(
+            children: [
+              for (var i = 0; i < 3; i++) ...[
+                if (i > 0) const SizedBox(width: 3),
+                Expanded(
+                  child: Container(
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: i == 2 ? const Color(0xFF9AAAA4) : _blue,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final (i, label, grams) in [
+                (0, '탄수화물', macros.carbs),
+                (1, '단백질', macros.protein),
+                (2, '지방', macros.fat),
+              ])
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 7, right: 6),
+                        child: CircleAvatar(
+                          radius: 4,
+                          backgroundColor: i == 2
+                              ? const Color(0xFF9AAAA4)
+                              : _blue,
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label, style: _small),
+                            Text(
+                              '${grams}g',
+                              style: _strong.copyWith(fontSize: 17),
+                            ),
+                            Text(
+                              '${total == 0 ? 0 : (energy[i] * 100 / total).round()}%',
+                              style: _bmiLegend,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ]),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
+          child: Text(
+            '모든 수치는 입력한 정보로 계산한 참고값이에요. 질환이 있거나 급격한 체중 변화를 계획한다면 전문가와 상담하세요.',
+            style: TextStyle(color: _muted, fontSize: 13, height: 1.5),
+          ),
+        ),
+        const SizedBox(height: 20),
+        _menu([
+          _row(
+            '정보 수정',
+            () => _editMetrics(context, refresh),
+            icon: Icons.tune,
+            subtitle: '닉네임 · 신체 정보 · 활동량 · 목표 칼로리',
+          ),
+        ]),
+      ],
+      trailing: TextButton(
+        onPressed: () => _editMetrics(context, refresh),
+        child: const Text('편집'),
+      ),
+    );
+  }
+
+  // 저체중·정상·과체중 3구간 눈금과 현재 BMI 위치.
+  Widget _bmiScale() {
+    final v = bmi;
+    final idx = v < 18.5 ? 0 : (v < 23 ? 1 : 2);
+    final frac = switch (idx) {
+      0 => ((v - 14) / 4.5).clamp(0.0, 1.0),
+      1 => (v - 18.5) / 4.5,
+      _ => ((v - 23) / 9).clamp(0.0, 1.0),
+    };
+    return LayoutBuilder(
+      builder: (context, box) => SizedBox(
+        height: 8,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Row(
+              children: [
+                for (var i = 0; i < 3; i++) ...[
+                  if (i > 0) const SizedBox(width: 3),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: i == idx
+                            ? const Color(0x8C49B3C5)
+                            : AppTheme.border,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            Positioned(
+              left: (box.maxWidth * (idx + frac) / 3 - 2).clamp(
+                0.0,
+                box.maxWidth - 4,
+              ),
+              top: -4,
+              child: Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: _green,
+                  borderRadius: BorderRadius.circular(2),
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Future<void> _editMetrics(BuildContext context, StateSetter refresh) async {
     final fields = [_name, _age, _height, _goal, _calories];
@@ -742,6 +981,13 @@ class _ProfileTabState extends State<ProfileTab> {
     );
     if (saved != true || !mounted) return;
     if (context.mounted) _toast(context, '저장되었어요');
+    // 목표 칼로리를 직접 고치지 않았고 계산 재료가 바뀌었으면 권장 칼로리로 다시 계산한다.
+    final recalc =
+        fields[4].trim() == _calories &&
+        (fields[1].trim() != _age ||
+            fields[2].trim() != _height ||
+            gender != _gender ||
+            activity != _activity);
     setState(() {
       _name = fields[0].trim();
       _age = fields[1].trim();
@@ -750,6 +996,7 @@ class _ProfileTabState extends State<ProfileTab> {
       _calories = fields[4].trim();
       _gender = gender;
       _activity = activity;
+      if (recalc) _calories = recommendedCalories.toString();
     });
     refresh(() {});
   }
@@ -1097,36 +1344,41 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
       ]),
       _group('1:1 문의', [
-        _row('문의하기', () {
-          final form = GlobalKey<FormState>();
-          Navigator.push<void>(
-            context,
-            MaterialPageRoute(
-              builder: (context) => Form(
-                key: form,
-                child: _page(
-                  context,
-                  '1:1 문의',
-                  [
-                    _menu([_field('문의 내용', '', (_) {}, lines: 5)]),
-                    const SizedBox(height: 14),
-                    const Text(
-                      '평일 10:00~18:00 · 영업일 기준 1~2일 안에 답변해요.',
-                      style: _small,
-                    ),
-                  ],
-                  back: '고객센터',
-                  action: _action('문의하기', () {
-                    if (form.currentState!.validate()) {
-                      _toast(context, '문의가 접수되었어요');
-                      Navigator.pop(context);
-                    }
-                  }),
+        _row(
+          '문의하기',
+          icon: Icons.chat_bubble_outline,
+          subtitle: '평일 10:00~18:00 · 영업일 기준 1~2일 안에 답변해요',
+          () {
+            final form = GlobalKey<FormState>();
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => Form(
+                  key: form,
+                  child: _page(
+                    context,
+                    '1:1 문의',
+                    [
+                      _menu([_field('문의 내용', '', (_) {}, lines: 5)]),
+                      const SizedBox(height: 14),
+                      const Text(
+                        '평일 10:00~18:00 · 영업일 기준 1~2일 안에 답변해요.',
+                        style: _small,
+                      ),
+                    ],
+                    back: '고객센터',
+                    action: _action('문의하기', () {
+                      if (form.currentState!.validate()) {
+                        _toast(context, '문의가 접수되었어요');
+                        Navigator.pop(context);
+                      }
+                    }),
+                  ),
                 ),
               ),
-            ),
-          );
-        }),
+            );
+          },
+        ),
       ]),
     ]);
   }
@@ -1136,13 +1388,16 @@ Widget _document(BuildContext context, String title, List<String> lines) =>
     _page(context, title, [
       for (final line in lines)
         Padding(
-          padding: const EdgeInsets.only(bottom: 5),
+          padding: EdgeInsets.only(
+            top: line.startsWith('# ') ? 14 : 0,
+            bottom: 6,
+          ),
           child: Text(
-            line,
+            line.startsWith('# ') ? line.substring(2) : line,
             style: TextStyle(
               color: _green,
               height: 1.5,
-              fontWeight: RegExp(r'^(제\d+조|\d+\.)').hasMatch(line)
+              fontWeight: line.startsWith('# ')
                   ? FontWeight.bold
                   : FontWeight.normal,
             ),
@@ -1256,9 +1511,25 @@ Widget _row(
   IconData? icon,
   String? value,
   String? subtitle,
+  String? badge,
 }) => ListTile(
   leading: icon == null ? null : Icon(icon, color: _green, size: 21),
-  title: Text(title, style: const TextStyle(color: _green, fontSize: 15)),
+  title: badge == null
+      ? Text(title, style: const TextStyle(color: _green, fontSize: 15))
+      : Row(
+          children: [
+            Text(title, style: const TextStyle(color: _green, fontSize: 15)),
+            const SizedBox(width: 6),
+            Text(
+              badge,
+              style: const TextStyle(
+                color: AppTheme.accent,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
   subtitle: subtitle == null ? null : Text(subtitle, style: _small),
   trailing: Row(
     mainAxisSize: MainAxisSize.min,
@@ -1269,6 +1540,47 @@ Widget _row(
   ),
   onTap: onTap,
 );
+
+const _bmiLegend = TextStyle(color: _muted, fontSize: 12);
+
+String _thousands(int v) =>
+    v.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+
+Widget _labelValue(String label, String value) => Text.rich(
+  TextSpan(
+    style: _small,
+    children: [
+      TextSpan(text: label),
+      TextSpan(
+        text: value,
+        style: const TextStyle(color: _green, fontWeight: FontWeight.bold),
+      ),
+    ],
+  ),
+);
+
+Widget _metricCard(String label, String value, String unit, String caption) =>
+    _panel([
+      Text(label, style: _bmiLegend),
+      const SizedBox(height: 4),
+      Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: value, style: _strong.copyWith(fontSize: 21)),
+            TextSpan(
+              text: ' $unit',
+              style: const TextStyle(
+                color: _muted,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(caption, style: _bmiLegend),
+    ]);
 
 Widget _stat(String label, String value) => Column(
   crossAxisAlignment: CrossAxisAlignment.start,

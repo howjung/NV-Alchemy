@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -171,6 +172,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     PrimaryButton(label: '로그인', onPressed: _login),
+                    // 개발 중에만 보이는 지름길(디버그 빌드 전용, 릴리스에서는 사라진다).
+                    if (kDebugMode)
+                      Center(
+                        child: TextButton(
+                          onPressed: () => Navigator.pushReplacementNamed(
+                            context,
+                            AppRoutes.home,
+                          ),
+                          child: const Text('개발자 · 바로 홈으로'),
+                        ),
+                      ),
                   ],
                 ),
               ),

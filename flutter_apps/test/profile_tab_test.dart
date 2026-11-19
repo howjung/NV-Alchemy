@@ -84,7 +84,7 @@ void main() {
   ) async {
     await _pump(tester);
     await _open(tester, '배송지 관리');
-    await tester.tap(find.textContaining('집 · 기본'));
+    await tester.tap(find.text('집'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('배송지 삭제'));
     await tester.pumpAndSettle();
@@ -266,12 +266,23 @@ void main() {
     await tester.tap(find.text('프로필'));
     await tester.pumpAndSettle();
     await _open(tester, '배송지 관리');
-    await tester.tap(find.textContaining('집 · 기본'));
+    await tester.tap(find.text('집'));
     await tester.pumpAndSettle();
     expect(find.text('기본 배송지로 설정'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '저장'), findsNothing);
     await tester.tap(find.widgetWithText(TextButton, '저장'));
     await tester.pumpAndSettle();
     expect(find.text('저장되었어요'), findsOneWidget);
+  });
+
+  testWidgets('terms show headings and numbered items without stray numbers', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await _open(tester, '서비스 이용약관');
+    expect(find.text('제1조 (목적)'), findsOneWidget);
+    expect(find.text('# 제1조 (목적)'), findsNothing);
+    expect(find.text('1.'), findsNothing);
+    expect(find.textContaining('1. 서비스: 체중·칼로리'), findsOneWidget);
   });
 }

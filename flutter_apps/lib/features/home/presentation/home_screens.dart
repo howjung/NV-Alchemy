@@ -11,6 +11,7 @@ import '../../records/presentation/records_tab.dart';
 
 import '../../../core/navigation/app_routes.dart';
 import '../../../core/state/user_data.dart';
+import '../../../core/state/body_metrics.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_overlays.dart';
 import '../../../core/widgets/app_screen_frame.dart';
@@ -640,7 +641,7 @@ class _DashboardDetails extends StatelessWidget {
               width: 70,
               height: 70,
               child: CircularProgressIndicator(
-                value: (_total(1) / 2442).clamp(0.0, 1.0),
+                value: (_total(1) / calorieGoal).clamp(0.0, 1.0),
                 strokeWidth: 8,
                 backgroundColor: Color(0xFFDDE9E5),
               ),
@@ -653,8 +654,9 @@ class _DashboardDetails extends StatelessWidget {
                   TextSpan(
                     children: [
                       TextSpan(
-                        text: MaterialLocalizations.of(context)
-                            .formatDecimal((2442 - _total(1)).clamp(0, 2442)),
+                        text: MaterialLocalizations.of(context).formatDecimal(
+                          (calorieGoal - _total(1)).clamp(0, calorieGoal),
+                        ),
                         style: const TextStyle(fontSize: 30),
                       ),
                       TextSpan(
@@ -669,7 +671,7 @@ class _DashboardDetails extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '섭취  · 목표 2,442 kcal',
+                  '섭취  · 목표 ${MaterialLocalizations.of(context).formatDecimal(calorieGoal)} kcal',
                   style: TextStyle(color: AppTheme.muted, fontSize: 12),
                 ),
               ],
@@ -682,24 +684,24 @@ class _DashboardDetails extends StatelessWidget {
             Expanded(
               child: _Macro(
                 label: '탄수화물',
-                value: ' / 256g',
-                progress: (_total(2) / 256).clamp(0.0, 1.0),
+                value: ' / ${macroGoals.carbs}g',
+                progress: (_total(2) / macroGoals.carbs).clamp(0.0, 1.0),
               ),
             ),
             SizedBox(width: 14),
             Expanded(
               child: _Macro(
                 label: '단백질',
-                value: ' / 128g',
-                progress: (_total(3) / 128).clamp(0.0, 1.0),
+                value: ' / ${macroGoals.protein}g',
+                progress: (_total(3) / macroGoals.protein).clamp(0.0, 1.0),
               ),
             ),
             SizedBox(width: 14),
             Expanded(
               child: _Macro(
                 label: '지방',
-                value: ' / 64g',
-                progress: (_total(4) / 64).clamp(0.0, 1.0),
+                value: ' / ${macroGoals.fat}g',
+                progress: (_total(4) / macroGoals.fat).clamp(0.0, 1.0),
               ),
             ),
           ],

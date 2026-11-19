@@ -245,35 +245,15 @@ class _ShoppingTabState extends State<ShoppingTab> {
                             ),
                           ),
                         ),
-                        AppMenu<String>(
+                        IconButton.outlined(
                           tooltip: '장바구니',
-                          width: _cart.isEmpty ? 240 : 310,
-                          offset: Offset(_cart.isEmpty ? -200 : -270, 0),
-                          selected: 'view',
-                          items: [
-                            if (_cart.isEmpty)
-                              const AppMenuItem('empty', '장바구니가 비어 있어요')
-                            else ...[
-                              for (final item in _cart.entries)
-                                AppMenuItem('item', _products[item.key].name),
-                              AppMenuItem('total', '합계 ${_won(_subtotal)}'),
-                              const AppMenuItem('view', '장바구니 보기 ›'),
-                            ],
-                          ],
-                          onSelected: (value) {
-                            if (value != 'empty') _open(ShoppingView.cart);
-                          },
-                          child: IgnorePointer(
-                            child: IconButton.outlined(
-                              onPressed: () {},
-                              icon: Badge(
-                                isLabelVisible: _count > 0,
-                                label: Text('$_count'),
-                                child: const Icon(
-                                  Icons.shopping_bag_outlined,
-                                  color: _green,
-                                ),
-                              ),
+                          onPressed: () => _open(ShoppingView.cart),
+                          icon: Badge(
+                            isLabelVisible: _count > 0,
+                            label: Text('$_count'),
+                            child: const Icon(
+                              Icons.shopping_bag_outlined,
+                              color: _green,
                             ),
                           ),
                         ),

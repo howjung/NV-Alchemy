@@ -18,6 +18,7 @@ const _seedProfile = {
   'age': '25',
   'height': '175',
   'weight': '74',
+  'startWeight': '77.3',
   'goal': '68',
   'calories': '2442',
   'activity': '보통 활동',

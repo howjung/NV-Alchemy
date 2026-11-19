@@ -15,8 +15,6 @@ Future<void> _pump(WidgetTester tester) async {
 Future<void> _openCart(WidgetTester tester) async {
   await tester.tap(find.byTooltip('장바구니'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('장바구니 보기 ›'));
-  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -87,23 +85,13 @@ void main() {
     expect(find.text('상품을 뺄까요?'), findsOneWidget);
   });
 
-  testWidgets('header cart dropdown is empty first, then lists items', (
+  testWidgets('header cart button goes straight to the cart page', (
     tester,
   ) async {
     await _pump(tester);
     await tester.tap(find.byTooltip('장바구니'));
     await tester.pumpAndSettle();
-    expect(find.text('장바구니가 비어 있어요'), findsOneWidget);
-    await tester.tapAt(const Offset(5, 500));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('장바구니 담기').first);
-    await tester.pumpAndSettle(const Duration(seconds: 3));
-    await tester.tap(find.byTooltip('장바구니'));
-    await tester.pumpAndSettle();
-    expect(find.text('수비드 닭가슴살 샐러드'), findsWidgets);
-    expect(find.text('합계 6,900원'), findsOneWidget);
-    expect(find.text('장바구니 보기 ›'), findsOneWidget);
+    expect(find.text('장바구니가 비어 있어요.'), findsOneWidget);
   });
 
   testWidgets('product sheet shows sellers and adds to cart', (tester) async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/state/body_metrics.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
 import '../../../core/widgets/app_screen_frame.dart';
@@ -375,7 +376,7 @@ class _RecordsTabState extends State<RecordsTab> {
       (sum, meal) => sum + (int.tryParse(meal.values[index]) ?? 0),
     );
     final calories = total(1);
-    final remaining = (2442 - calories).clamp(0, 2442);
+    final remaining = (calorieGoal - calories).clamp(0, calorieGoal);
     return SafeArea(
       bottom: false,
       child: DefaultTextStyle.merge(
@@ -456,7 +457,12 @@ class _RecordsTabState extends State<RecordsTab> {
                   ),
                 ),
                 const SizedBox(width: 9),
-                const Expanded(child: Text('/ 2,442 kcal', style: _muted)),
+                Expanded(
+                  child: Text(
+                    '/ ${MaterialLocalizations.of(context).formatDecimal(calorieGoal)} kcal',
+                    style: _muted,
+                  ),
+                ),
                 Text(
                   '${MaterialLocalizations.of(context).formatDecimal(remaining)} 남음',
                   style: const TextStyle(
@@ -468,7 +474,7 @@ class _RecordsTabState extends State<RecordsTab> {
             ),
             const SizedBox(height: 10),
             LinearProgressIndicator(
-              value: (calories / 2442).clamp(0.0, 1.0),
+              value: (calories / calorieGoal).clamp(0.0, 1.0),
               minHeight: 8,
               borderRadius: BorderRadius.circular(8),
               color: _accent,
