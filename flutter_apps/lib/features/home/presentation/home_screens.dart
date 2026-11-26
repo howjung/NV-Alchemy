@@ -1,0 +1,1155 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+
+import '../../profile/presentation/profile_tab.dart';
+
+import '../../shopping/presentation/shopping_tab.dart';
+
+import '../../social/presentation/social_tab.dart';
+
+import '../../records/presentation/records_tab.dart';
+
+import '../../../core/navigation/app_routes.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/network/backend_api.dart';
+import '../../../core/state/user_data.dart';
+import '../../../core/state/body_metrics.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_overlays.dart';
+import '../../../core/widgets/app_screen_frame.dart';
+import 'home_detail_screens.dart';
+import 'home_record_sheets.dart';
+import 'home_meal_sheet.dart';
+
+class HomeDashboardScreen extends StatelessWidget {
+  const HomeDashboardScreen({super.key});
+  @override
+  Widget build(BuildContext context) => const MainShell();
+}
+
+class MainShell extends StatefulWidget {
+  const MainShell({
+    this.initialIndex = 0,
+    this.initialSocialView = SocialView.crew,
+    super.key,
+  });
+  final int initialIndex;
+  final SocialView initialSocialView;
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  late int _index = widget.initialIndex;
+  HomeMetrics _metrics = (
+    height: double.tryParse(userProfile['height']!) ?? 175,
+    weight: double.tryParse(userProfile['weight']!) ?? 74,
+    goal: double.tryParse(userProfile['goal']!) ?? 68,
+  );
+
+  late final DateTime _dashboardDate = currentUserId != null
+      ? DateUtils.dateOnly(DateTime.now())
+      : DateTime(2026, 10, 21);
+
+  late final _weights = <DateTime, double>{
+    if (currentUserId == null) _dashboardDate: _metrics.weight,
+  };
+  final _weightIds = <DateTime, int>{};
+
+  late final _mealsByDate = <DateTime, Map<String, HomeMeal>>{
+    if (currentUserId == null)
+      DateTime(2026, 10, 21): {
+        '아침': (type: '아침', values: ['그릭 요거트 & 사과', '320', '40', '18', '6']),
+        '점심': (type: '점심', values: ['현미곤약밥 & 소불고기', '620', '70', '35', '18']),
+      },
+  };
+  final _mealIds = <DateTime, Map<String, int>>{};
+
+  @override
+  void initState() {
+    super.initState();
+    if (currentUserId != null) {
+      unawaited(_loadServerData());
+    }
+  }
+
+  void _showSyncError(String message) {
+    if (mounted) showAppToast(context, message);
+  }
+
+  Future<void> _loadServerData() async {
+    final userId = currentUserId;
+    if (userId == null) return;
+    try {
+      final results = await Future.wait([
+        BackendApi.instance.getUser(userId),
+        BackendApi.instance.getWeights(userId),
+        BackendApi.instance.getMeals(userId),
+      ]);
+      if (!mounted) return;
+      final serverUser = results[0] as ApiUser?;
+      final serverWeights = results[1] as List<ApiWeight>;
+      final serverMeals = results[2] as List<ApiMeal>;
+
+      setState(() {
+        if (serverUser != null) {
+          syncUserFromServer(serverUser);
+        }
+        _weights.clear();
+        _weightIds.clear();
+        for (final entry in serverWeights) {
+          final date = parseApiDate(entry.recordedDate);
+          if (date == null) continue;
+          _weights[date] = entry.weight;
+          _weightIds[date] = entry.id;
+        }
+
+        _mealsByDate.clear();
+        _mealIds.clear();
+        for (final meal in serverMeals) {
+          final date = parseApiDate(meal.recordedDate);
+          if (date == null) continue;
+          (_mealsByDate[date] ??= {})[meal.mealType] = (
+            type: meal.mealType,
+            values: [
+              meal.foodName,
+              meal.calories.toString(),
+              meal.carbs.round().toString(),
+              meal.protein.round().toString(),
+              meal.fat.round().toString(),
+            ],
+          );
+          (_mealIds[date] ??= {})[meal.mealType] = meal.id;
+        }
+
+        final latestWeight = serverWeights.isNotEmpty
+            ? serverWeights.last.weight
+            : _metrics.weight;
+        _metrics = (
+          height: _metrics.height,
+          weight: latestWeight,
+          goal: serverUser?.targetWeight ?? _metrics.goal,
+        );
+        _syncProfile();
+      });
+      await saveUserData();
+    } on ApiException catch (error) {
+      _showSyncError(error.message);
+    }
+  }
+
+  void _saveMeal(DateTime date, HomeMeal meal) {
+    final day = DateUtils.dateOnly(date);
+    setState(() => (_mealsByDate[day] ??= {})[meal.type] = meal);
+    if (currentUserId != null) {
+      unawaited(_syncMealToServer(day, meal));
+    }
+  }
+
+  Future<void> _syncMealToServer(DateTime date, HomeMeal meal) async {
+    final userId = currentUserId;
+    if (userId == null) return;
+    final foodName = meal.values[0];
+    final calories = int.tryParse(meal.values[1]) ?? 0;
+    final carbs = double.tryParse(meal.values[2]) ?? 0;
+    final protein = double.tryParse(meal.values[3]) ?? 0;
+    final fat = double.tryParse(meal.values[4]) ?? 0;
+    final recordedDate = formatApiDate(date);
+    final existingId = _mealIds[date]?[meal.type];
+    try {
+      if (existingId != null) {
+        await BackendApi.instance.updateMeal(
+          existingId,
+          mealType: meal.type,
+          foodName: foodName,
+          calories: calories,
+          carbs: carbs,
+          protein: protein,
+          fat: fat,
+          recordedDate: recordedDate,
+        );
+      } else {
+        final created = await BackendApi.instance.createMeal(
+          userId: userId,
+          mealType: meal.type,
+          foodName: foodName,
+          calories: calories,
+          carbs: carbs,
+          protein: protein,
+          fat: fat,
+          recordedDate: recordedDate,
+        );
+        (_mealIds[date] ??= {})[meal.type] = created.id;
+      }
+    } on ApiException catch (error) {
+      _showSyncError(error.message);
+    }
+  }
+
+  void _deleteMeal(DateTime date, String type) {
+    final day = DateUtils.dateOnly(date);
+    setState(() {
+      final meals = _mealsByDate[day];
+      meals?.remove(type);
+      if (meals != null && meals.isEmpty) _mealsByDate.remove(day);
+    });
+    final existingId = _mealIds[day]?.remove(type);
+    if (existingId != null && currentUserId != null) {
+      unawaited(_deleteMealOnServer(existingId));
+    }
+  }
+
+  Future<void> _deleteMealOnServer(int id) async {
+    try {
+      await BackendApi.instance.deleteMeal(id);
+    } on ApiException catch (error) {
+      _showSyncError(error.message);
+    }
+  }
+
+  void _updateHomeMetrics(HomeMetrics metrics) {
+    final weightChanged = metrics.weight != _metrics.weight;
+    final goalChanged = metrics.goal != _metrics.goal;
+    setState(() {
+      if (weightChanged) {
+        _weights[_dashboardDate] = metrics.weight;
+      }
+      _metrics = metrics;
+      _syncProfile();
+    });
+    if (currentUserId != null) {
+      if (weightChanged) {
+        unawaited(_syncWeightToServer(_dashboardDate, metrics.weight));
+      }
+      if (goalChanged) {
+        unawaited(_syncUserGoalToServer(metrics.goal));
+      }
+    }
+  }
+
+  // 홈에서 고친 키·체중·목표를 프로필과 같은 값으로 맞춘다.
+  void _syncProfile() {
+    userProfile['height'] = numText(_metrics.height);
+    userProfile['weight'] = numText(_metrics.weight);
+    userProfile['goal'] = numText(_metrics.goal);
+  }
+
+  void _saveWeight(DateTime date, double weight) {
+    final day = DateUtils.dateOnly(date);
+    setState(() {
+      _weights[day] = weight;
+      _metrics = (height: _metrics.height, weight: weight, goal: _metrics.goal);
+      _syncProfile();
+    });
+    if (currentUserId != null) {
+      unawaited(_syncWeightToServer(day, weight));
+    }
+  }
+
+  Future<void> _syncWeightToServer(DateTime date, double weight) async {
+    final userId = currentUserId;
+    if (userId == null) return;
+    final existingId = _weightIds[date];
+    try {
+      if (existingId != null) {
+        await BackendApi.instance.updateWeight(existingId, weight: weight);
+      } else {
+        final created = await BackendApi.instance.createWeight(
+          userId: userId,
+          weight: weight,
+          recordedDate: formatApiDate(date),
+        );
+        _weightIds[date] = created.id;
+      }
+    } on ApiException catch (error) {
+      _showSyncError(error.message);
+    }
+  }
+
+  Future<void> _syncUserGoalToServer(double goal) async {
+    final userId = currentUserId;
+    if (userId == null) return;
+    try {
+      await BackendApi.instance.updateUser(userId, targetWeight: goal);
+    } on ApiException catch (error) {
+      _showSyncError(error.message);
+    }
+  }
+
+  bool _shoppingCatalog = true;
+  int _profileOrderRequests = 0;
+  bool _ordersFromProfile = false;
+  @override
+  Widget build(BuildContext context) => AppScreenFrame(
+    figmaName: 'Antifreeze 메인',
+    // Keep tab snackbars within the app frame.
+    child: ScaffoldMessenger(
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: IndexedStack(
+          index: _index,
+          children: [
+            _HomeTab(
+              metrics: _metrics,
+              onMetricsChanged: _updateHomeMetrics,
+              date: _dashboardDate,
+              meals: _mealsByDate[_dashboardDate] ?? const {},
+              onMealSaved: (meal) => _saveMeal(_dashboardDate, meal),
+            ),
+            RecordsTab(
+              onOpenShop: () => setState(() => _index = 3),
+              initialDate: _dashboardDate,
+              weights: _weights,
+              onWeightSaved: _saveWeight,
+              mealsByDate: _mealsByDate,
+              onMealSaved: _saveMeal,
+              onMealDeleted: _deleteMeal,
+            ),
+            SocialTab(initialView: widget.initialSocialView),
+            ShoppingTab(
+              orderRequests: _profileOrderRequests,
+              onViewChanged: (view) => setState(() {
+                _shoppingCatalog = view == ShoppingView.catalog;
+                if (_shoppingCatalog && _ordersFromProfile) {
+                  _index = 4;
+                  _ordersFromProfile = false;
+                }
+              }),
+            ),
+            ProfileTab(
+              onOrders: () => setState(() {
+                _profileOrderRequests++;
+                _ordersFromProfile = true;
+                _shoppingCatalog = false;
+                _index = 3;
+              }),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _index == 3 && !_shoppingCatalog
+            ? null
+            : NavigationBar(
+                height: 72,
+                backgroundColor: Colors.white,
+                indicatorColor: const Color(0xFFE4F2F4),
+                selectedIndex: _index,
+                labelTextStyle: WidgetStateProperty.resolveWith(
+                  (states) => TextStyle(
+                    fontSize: 11,
+                    fontWeight: states.contains(WidgetState.selected)
+                        ? FontWeight.w700
+                        : FontWeight.w400,
+                  ),
+                ),
+                onDestinationSelected: (value) =>
+                    setState(() => _index = value),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home),
+                    label: '홈',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.calendar_month_outlined),
+                    selectedIcon: Icon(Icons.calendar_month),
+                    label: '기록',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.groups_outlined),
+                    selectedIcon: Icon(Icons.groups),
+                    label: '소셜',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.shopping_bag_outlined),
+                    selectedIcon: Icon(Icons.shopping_bag),
+                    label: '쇼핑',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.person_outline),
+                    selectedIcon: Icon(Icons.person),
+                    label: '프로필',
+                  ),
+                ],
+              ),
+      ),
+    ),
+  );
+}
+
+class _HomeTab extends StatefulWidget {
+  const _HomeTab({
+    required this.metrics,
+    required this.onMetricsChanged,
+    required this.date,
+    required this.meals,
+    required this.onMealSaved,
+  });
+
+  final DateTime date;
+  final Map<String, HomeMeal> meals;
+  final ValueChanged<HomeMeal> onMealSaved;
+
+  final HomeMetrics metrics;
+  final ValueChanged<HomeMetrics> onMetricsChanged;
+
+  @override
+  State<_HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<_HomeTab> {
+  HomeMetrics get _metrics => widget.metrics;
+
+  Map<String, HomeMeal> get _meals => widget.meals;
+
+  Future<void> _recordMeal(String type) async {
+    final meal = await showHomeSheet<HomeMeal>(
+      context,
+      HomeMealSheet(initialType: type, meals: _meals, date: widget.date),
+    );
+    if (!mounted || meal == null) return;
+    widget.onMealSaved(meal);
+    showAppToast(context, '${meal.type} 식단을 기록했어요');
+  }
+
+  Future<void> _recordWeight() async {
+    final weight = await showHomeSheet<double>(
+      context,
+      WeightRecordSheet(weight: _metrics.weight),
+    );
+    if (mounted && weight != null) {
+      widget.onMetricsChanged((
+        height: _metrics.height,
+        weight: weight,
+        goal: _metrics.goal,
+      ));
+    }
+  }
+
+  Future<void> _editInfo() async {
+    final metrics = await showHomeSheet<HomeMetrics>(
+      context,
+      HomeInfoSheet(metrics: _metrics),
+    );
+    if (mounted && metrics != null) widget.onMetricsChanged(metrics);
+  }
+
+  @override
+  Widget build(BuildContext context) => CustomScrollView(
+    slivers: [
+      SliverToBoxAdapter(child: _HomeHero(date: widget.date)),
+      SliverToBoxAdapter(
+        child: _MealsSection(
+          onRecordWeight: _recordWeight,
+          onRecordMeal: _recordMeal,
+          meals: _meals,
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: _DashboardDetails(
+          metrics: _metrics,
+          onEditInfo: _editInfo,
+          meals: _meals,
+        ),
+      ),
+    ],
+  );
+}
+
+class _HomeHero extends StatefulWidget {
+  const _HomeHero({required this.date});
+  final DateTime date;
+
+  @override
+  State<_HomeHero> createState() => _HomeHeroState();
+}
+
+class _HomeHeroState extends State<_HomeHero> {
+  bool _unread = true;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 593,
+    child: Stack(
+      children: [
+        const ColoredBox(color: Color(0xFFE3F4F4), child: SizedBox.expand()),
+        Positioned(
+          top: 249,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: const ColoredBox(color: Color(0xFFB3E1E4)),
+        ),
+        Positioned(
+          top: 242,
+          left: 0,
+          right: 0,
+          child: SvgPicture.asset(
+            'assets/images/home_wave.svg',
+            height: 21,
+            fit: BoxFit.fill,
+          ),
+        ),
+        Positioned(
+          bottom: -4,
+          left: 0,
+          right: 0,
+          child: SvgPicture.asset(
+            'assets/images/home_shore.svg',
+            height: 18,
+            fit: BoxFit.fill,
+          ),
+        ),
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              (70.0 - MediaQuery.paddingOf(context).top).clamp(0.0, 70.0),
+              12,
+              0,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${widget.date.month}월 ${widget.date.day}일 ${const ['월', '화', '수', '목', '금', '토', '일'][widget.date.weekday - 1]}요일',
+                    style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+                  ),
+                ),
+                const _HeaderPill(icon: Icons.water_drop_outlined, label: '6'),
+                const SizedBox(width: 8),
+                InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.points),
+                  child: const _HeaderPill(label: '2,500P'),
+                ),
+                IconButton(
+                  tooltip: '알림',
+                  onPressed: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => NotificationsScreen(
+                        unread: _unread,
+                        onRead: () => setState(() => _unread = false),
+                      ),
+                    ),
+                  ),
+                  icon: Badge(
+                    isLabelVisible: _unread,
+                    backgroundColor: AppTheme.primary,
+                    child: const Icon(
+                      Icons.notifications_none,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Positioned(
+          top: 132,
+          left: 0,
+          right: 0,
+          child: Column(
+            children: [
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: '6', style: TextStyle(fontSize: 56)),
+                    TextSpan(text: ' 일째', style: TextStyle(fontSize: 20)),
+                  ],
+                ),
+                style: TextStyle(
+                  color: AppTheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                '연속으로 기록 중',
+                style: TextStyle(color: AppTheme.muted, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          top: 270,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: SvgPicture.asset(
+              'assets/images/home_mascot.svg',
+              width: 179,
+              height: 205,
+            ),
+          ),
+        ),
+        Positioned(
+          left: 52,
+          right: 52,
+          bottom: 15,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFF5A4BFF), width: 1.4),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _AiBadge(),
+                SizedBox(height: 3),
+                Text(
+                  '단백질이 53g 부족해요',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  '저녁에 계란이나 두부를 더해 보세요',
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: AppTheme.muted,
+                    fontSize: 11,
+                    height: 1.2,
+                  ),
+                ),
+                Divider(height: 8),
+                Text(
+                  '오늘도 기록하면 7일이에요 · 금빛 테두리까지 1일',
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: Color(0xFF7D8C86),
+                    fontSize: 9.5,
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _HeaderPill extends StatelessWidget {
+  const _HeaderPill({required this.label, this.icon});
+  final String label;
+  final IconData? icon;
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 32,
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0xFFE1ECEA)),
+    ),
+    child: Row(
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 17, color: AppTheme.muted),
+          const SizedBox(width: 4),
+        ],
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _AiBadge extends StatelessWidget {
+  const _AiBadge();
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEEDFC),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: const Text(
+        '✦ AI 한마디',
+        style: TextStyle(
+          color: Color(0xFF5146D9),
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+  );
+}
+
+class _MealsSection extends StatelessWidget {
+  const _MealsSection({
+    required this.onRecordWeight,
+    required this.onRecordMeal,
+    required this.meals,
+  });
+  final ValueChanged<String> onRecordMeal;
+  final Map<String, HomeMeal> meals;
+  final VoidCallback onRecordWeight;
+  @override
+  Widget build(BuildContext context) => Container(
+    color: Colors.white,
+    padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            const Expanded(child: Text('오늘 식단 기록', style: _sectionTitle)),
+            Text(
+              '${meals.length} / 4끼',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: homeMealTypes
+              .map(
+                (meal) => Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: InkWell(
+                      onTap: () => onRecordMeal(meal),
+                      borderRadius: BorderRadius.circular(17),
+                      child: Container(
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0F5F3),
+                          borderRadius: BorderRadius.circular(17),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 25,
+                              height: 25,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFFC6DCD5),
+                                ),
+                              ),
+                              child: Icon(
+                                meals.containsKey(meal)
+                                    ? Icons.check
+                                    : Icons.add,
+                                size: 17,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              meal,
+                              style: const TextStyle(
+                                color: AppTheme.muted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 12),
+        InkWell(
+          onTap: onRecordWeight,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: 46,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F5F3),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.water_drop, color: Color(0xFF48B9C9), size: 17),
+                SizedBox(width: 12),
+                Expanded(child: Text('체중')),
+                Text('기록하기 ›', style: TextStyle(fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _DashboardDetails extends StatelessWidget {
+  const _DashboardDetails({
+    required this.metrics,
+    required this.onEditInfo,
+    required this.meals,
+  });
+  final Map<String, HomeMeal> meals;
+  int _total(int index) => meals.values.fold(
+    0,
+    (sum, meal) => sum + (int.tryParse(meal.values[index]) ?? 0),
+  );
+  final HomeMetrics metrics;
+  final VoidCallback onEditInfo;
+  @override
+  Widget build(BuildContext context) => Container(
+    color: Colors.white,
+    padding: const EdgeInsets.fromLTRB(15, 8, 15, 34),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(child: Text('남은 칼로리', style: _sectionTitle)),
+            TextButton(onPressed: onEditInfo, child: const Text('내 정보 ›')),
+          ],
+        ),
+        const SizedBox(height: 17),
+        Row(
+          children: [
+            SizedBox(
+              width: 70,
+              height: 70,
+              child: CircularProgressIndicator(
+                value: (_total(1) / calorieGoal).clamp(0.0, 1.0),
+                strokeWidth: 8,
+                backgroundColor: Color(0xFFDDE9E5),
+              ),
+            ),
+            SizedBox(width: 18),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: MaterialLocalizations.of(context).formatDecimal(
+                          (calorieGoal - _total(1)).clamp(0, calorieGoal),
+                        ),
+                        style: const TextStyle(fontSize: 30),
+                      ),
+                      TextSpan(
+                        text: '  kcal',
+                        style: TextStyle(fontSize: 14, color: AppTheme.muted),
+                      ),
+                    ],
+                  ),
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  '섭취  · 목표 ${MaterialLocalizations.of(context).formatDecimal(calorieGoal)} kcal',
+                  style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+        ),
+        SizedBox(height: 22),
+        Row(
+          children: [
+            Expanded(
+              child: _Macro(
+                label: '탄수화물',
+                value: ' / ${macroGoals.carbs}g',
+                progress: (_total(2) / macroGoals.carbs).clamp(0.0, 1.0),
+              ),
+            ),
+            SizedBox(width: 14),
+            Expanded(
+              child: _Macro(
+                label: '단백질',
+                value: ' / ${macroGoals.protein}g',
+                progress: (_total(3) / macroGoals.protein).clamp(0.0, 1.0),
+              ),
+            ),
+            SizedBox(width: 14),
+            Expanded(
+              child: _Macro(
+                label: '지방',
+                value: ' / ${macroGoals.fat}g',
+                progress: (_total(4) / macroGoals.fat).clamp(0.0, 1.0),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: _MetricBox(
+                label: '키',
+                value: formatMetric(metrics.height),
+                unit: 'cm',
+              ),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: _MetricBox(
+                label: '현재 체중',
+                value: formatMetric(metrics.weight),
+                unit: 'kg',
+              ),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: _MetricBox(
+                label: '목표',
+                value: formatMetric(metrics.goal),
+                unit: 'kg',
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 28),
+        Row(
+          children: [
+            Expanded(child: Text('이번 주 기록', style: _sectionTitle)),
+            Text(
+              '평균 1,980 kcal',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+            ),
+          ],
+        ),
+        SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _Day('월', true),
+            _Day('화', true),
+            _Day('수', true),
+            _Day('목', true),
+            _Day('금', true, outlined: true),
+            _Day('토', false),
+            _Day('일', false),
+          ],
+        ),
+        SizedBox(height: 28),
+        Row(
+          children: [
+            Expanded(child: Text('체중 변화', style: _sectionTitle)),
+            Text(
+              '목표까지 ${formatMetric(metrics.goal - metrics.weight)}kg',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+            ),
+          ],
+        ),
+        SizedBox(height: 14),
+        SizedBox(
+          height: 92,
+          width: double.infinity,
+          child: CustomPaint(painter: _WeightChartPainter()),
+        ),
+      ],
+    ),
+  );
+}
+
+class _Macro extends StatelessWidget {
+  const _Macro({
+    required this.label,
+    required this.value,
+    required this.progress,
+  });
+  final double progress;
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+      const SizedBox(height: 3),
+      Text(
+        value,
+        style: const TextStyle(
+          color: AppTheme.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 9),
+      LinearProgressIndicator(
+        value: progress,
+        minHeight: 5,
+        borderRadius: BorderRadius.circular(3),
+        color: AppTheme.accent,
+        backgroundColor: const Color(0xFFDDE9E5),
+      ),
+    ],
+  );
+}
+
+class _MetricBox extends StatelessWidget {
+  const _MetricBox({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+  final String label;
+  final String value;
+  final String unit;
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 70,
+    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF0F5F3),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.muted,
+            fontSize: 11,
+            height: 1,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: value,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                ),
+              ),
+              TextSpan(
+                text: unit,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: AppTheme.muted,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+          style: const TextStyle(color: AppTheme.primary),
+        ),
+      ],
+    ),
+  );
+}
+
+class _Day extends StatelessWidget {
+  const _Day(this.label, this.done, {this.outlined = false});
+  final String label;
+  final bool done;
+  final bool outlined;
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+      const SizedBox(height: 8),
+      Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: outlined
+              ? Colors.white
+              : done
+              ? const Color(0xFF49B8C8)
+              : const Color(0xFFF0F5F3),
+          shape: BoxShape.circle,
+          border: outlined
+              ? Border.all(color: const Color(0xFFBBD9D0), width: 1.5)
+              : null,
+        ),
+        child: Icon(
+          Icons.water_drop,
+          size: 17,
+          color: done
+              ? outlined
+                    ? const Color(0xFFBBD9D0)
+                    : Colors.white
+              : Colors.transparent,
+        ),
+      ),
+    ],
+  );
+}
+
+class _WeightChartPainter extends CustomPainter {
+  const _WeightChartPainter();
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(14)),
+      Paint()..color = const Color(0xFFF0F5F3),
+    );
+    final curve = Path()
+      ..moveTo(0, 18)
+      ..cubicTo(
+        size.width * .28,
+        26,
+        size.width * .62,
+        56,
+        size.width * .91,
+        59,
+      );
+    final fill = Path.from(curve)
+      ..lineTo(size.width * .91, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(fill, Paint()..color = const Color(0xFFD8ECEB));
+    canvas.drawPath(
+      curve,
+      Paint()
+        ..color = const Color(0xFF42B4C5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2,
+    );
+    canvas.drawLine(
+      Offset(0, size.height - 18),
+      Offset(size.width, size.height - 18),
+      Paint()
+        ..color = const Color(0xFFB9D9D5)
+        ..strokeWidth = 1,
+    );
+    final point = Offset(size.width * .91, 59);
+    canvas.drawCircle(point, 5, Paint()..color = Colors.white);
+    canvas.drawCircle(
+      point,
+      5,
+      Paint()
+        ..color = const Color(0xFF42B4C5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+const _sectionTitle = TextStyle(
+  color: AppTheme.primary,
+  fontSize: 18,
+  fontWeight: FontWeight.w700,
+);
