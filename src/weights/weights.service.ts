@@ -17,8 +17,11 @@ export class WeightsService {
     return this.weightsRepository.save(weight);
   }
 
-  findAll() {
-    return this.weightsRepository.find();
+  findAll(userId?: number) {
+    return this.weightsRepository.find({
+      where: userId !== undefined ? { userId } : undefined,
+      order: { recordedDate: 'ASC', id: 'ASC' },
+    });
   }
 
   findOne(id: number) {

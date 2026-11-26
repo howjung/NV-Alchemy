@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -12,13 +12,21 @@ export class UsersService {
     private usersRepository: Repository<User>,
   ) {}
 
-  create(createUserDto: CreateUserDto) {
+  async create(createUserDto: CreateUserDto) {
+    const existing = await this.findByEmail(createUserDto.email);
+    if (existing) {
+      throw new ConflictException('이미 가입된 이메일입니다.');
+    }
     const user = this.usersRepository.create(createUserDto);
     return this.usersRepository.save(user);
   }
 
   findAll() {
     return this.usersRepository.find();
+  }
+
+  findByEmail(email: string) {
+    return this.usersRepository.findOneBy({ email: email.trim() });
   }
 
   findOne(id: number) {

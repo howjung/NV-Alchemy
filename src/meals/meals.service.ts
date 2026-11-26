@@ -60,8 +60,18 @@ export class MealsService {
     return this.mealsRepository.save(meal);
   }
 
-  findAll() {
-    return this.mealsRepository.find();
+  findAll(filter?: { userId?: number; recordedDate?: string }) {
+    const where: Partial<Pick<Meal, 'userId' | 'recordedDate'>> = {};
+    if (filter?.userId !== undefined) {
+      where.userId = filter.userId;
+    }
+    if (filter?.recordedDate) {
+      where.recordedDate = filter.recordedDate;
+    }
+    return this.mealsRepository.find({
+      where: Object.keys(where).length > 0 ? where : undefined,
+      order: { recordedDate: 'ASC', id: 'ASC' },
+    });
   }
 
   findOne(id: number) {

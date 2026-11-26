@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -6,6 +7,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
@@ -33,6 +35,9 @@ export class MealsController {
     }),
   )
   async uploadImage(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('이미지 파일이 필요합니다.');
+    }
     const analysis = await this.mealsService.analyzeFoodImage(
       file.path,
       file.mimetype,
@@ -50,8 +55,18 @@ export class MealsController {
   }
 
   @Get()
-  findAll() {
-    return this.mealsService.findAll();
+  findAll(
+    @Query('userId') userId?: string,
+    @Query('recordedDate') recordedDate?: string,
+  ) {
+    const parsedUserId = userId ? Number(userId) : undefined;
+    return this.mealsService.findAll({
+      userId:
+        parsedUserId !== undefined && Number.isInteger(parsedUserId)
+          ? parsedUserId
+          : undefined,
+      recordedDate: recordedDate?.trim() || undefined,
+    });
   }
 
   @Get(':id')

@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { WeightsService } from './weights.service';
 import { CreateWeightDto } from './dto/create-weight.dto';
 import { UpdateWeightDto } from './dto/update-weight.dto';
@@ -13,8 +22,13 @@ export class WeightsController {
   }
 
   @Get()
-  findAll() {
-    return this.weightsService.findAll();
+  findAll(@Query('userId') userId?: string) {
+    const parsedUserId = userId ? Number(userId) : undefined;
+    return this.weightsService.findAll(
+      parsedUserId !== undefined && Number.isInteger(parsedUserId)
+        ? parsedUserId
+        : undefined,
+    );
   }
 
   @Get(':id')
