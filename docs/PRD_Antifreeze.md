@@ -463,12 +463,12 @@ AI가 분석·추천하는 식단 관리 앱. 식단 기록, 크루 소셜, 쇼�
 | --- | --- | --- |
 | 앱(Frontend) | Flutter (VS Code) | 확정 |
 | 서버(Backend) | Node.js REST API. 현재 서버 코드는 NestJS(Express 플랫폼) + TypeORM | Node.js는 팀 결정, NestJS·TypeORM은 서버 구현 기준 |
-| DB | PostgreSQL | 팀 결정 (중간발표의 MariaDB에서 변경) |
+| DB | PostgreSQL  Supabase| 팀 결정 (중간발표의 MariaDB에서 변경) |
 | AI | Gemini API (Flash 계열) | 확정 |
 | 협업 | Figma, GitHub, Notion | 중간발표 |
 
 > Python은 사용하지 않는다. 중간발표의 Python 3.14와 MariaDB는 폐기하고, 서버와 AI 호출 모두 Node.js로 구현한다.
-> 노션의 React + Supabase 구성도 폐기한다. 별도 서버가 생기므로 인증, 주문, 구독, AI 호출, 탈퇴는 모두 Node.js API로 구현한다.
+> 노션의 React + Supabase 별도 서버가 생기므로 인증, 주문, 구독, AI 호출, 탈퇴는 모두 Node.js API로 구현한다.
 
 ### 8.2 데이터 모델
 노션 ERD 초안(14개 테이블)을 기준으로 하고 v2~v7에서 필요해진 테이블을 추가한다.
