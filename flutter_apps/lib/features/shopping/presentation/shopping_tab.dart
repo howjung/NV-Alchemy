@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_overlays.dart';
+import '../../profile/presentation/profile_tab.dart';
 
 const _green = AppTheme.primary;
 const _muted = AppTheme.muted;
@@ -51,6 +54,14 @@ const _products = <_Product>[
   ),
 ];
 
+const _sellers = <({String name, String shipping, int extra})>[
+  (name: '식단공방', shipping: '무료배송', extra: 0),
+  (name: '오늘한끼', shipping: '무료배송', extra: 1000),
+  (name: '푸드랩 마켓', shipping: '배송비 2,500원', extra: 2800),
+];
+
+const _suggestions = ['닭가슴살 샐러드', '곤약밥 밀키트', '그릭요거트', '현미 도시락'];
+
 String _won(int value) =>
     '${value.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',')}원';
 
@@ -75,7 +86,16 @@ class _ShoppingTabState extends State<ShoppingTab> {
   final _cart = <int, int>{};
   final _compared = <int>{};
   final _favorites = <int>{};
-  final _orders = <({Map<int, int> items, int total, int points})>[];
+  final _orders =
+      <
+        ({
+          Map<int, int> items,
+          int total,
+          int points,
+          String payment,
+          String address,
+        })
+      >[];
   late ShoppingView _view = widget.initialView;
   String _query = '';
   String _category = '전체 상품';
@@ -90,6 +110,8 @@ class _ShoppingTabState extends State<ShoppingTab> {
   int _quantity = 1;
   int _skips = 0;
   String _delivery = '문 앞에 놓아 주세요';
+  var _address = 0;
+  String _payment = userCards.firstOrNull ?? '계좌이체';
 
   @override
   void didUpdateWidget(covariant ShoppingTab oldWidget) {
@@ -108,6 +130,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
       (_subtotal < _balance ? _subtotal : _balance) ~/ 100 * 100;
 
   void _open(ShoppingView view) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     setState(() => _view = view);
     widget.onViewChanged?.call(view);
   }
@@ -120,6 +143,52 @@ class _ShoppingTabState extends State<ShoppingTab> {
     }
     if (_points > _pointLimit) _points = _pointLimit;
   });
+
+  Future<void> _confirmRemove(int index) async {
+    final confirmed = await showConfirmPopup(
+      context,
+      title: '상품을 뺄까요?',
+      message: _products[index].name,
+      confirmLabel: '빼기',
+    );
+    if (!confirmed || !mounted) return;
+    _change(index, 0);
+    _toast('장바구니에서 뺐어요');
+  }
+
+  // 장바구니 바(담은 상품이 있을 때)를 가리지 않도록 그 위에 띄운다.
+  void _toast(String message) => showAppToast(
+    context,
+    message,
+    bottom: _view == ShoppingView.catalog && _count > 0 ? 80 : 24,
+  );
+
+  // 프로필의 추가 화면을 열고, 돌아오면 목록을 다시 보여 준다.
+  Future<void> _addCard() async {
+    final before = userCards.length;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => const ProfileTab(initialView: ProfileView.payment),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      if (userCards.length > before) _payment = userCards.last;
+    });
+  }
+
+  Future<void> _addAddress() async {
+    final before = userAddresses.length;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => const ProfileTab(initialView: ProfileView.address),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      if (userAddresses.length > before) _address = userAddresses.length - 1;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -138,13 +207,19 @@ class _ShoppingTabState extends State<ShoppingTab> {
       for (var index = 0; index < _products.length; index++)
         if ((_category == '전체 상품' || _category == _products[index].category) &&
             (!_fit || _products[index].score >= 90) &&
-            '${_products[index].name} ${_products[index].category}'.contains(
-              _query.trim(),
-            ))
+            _query
+                .trim()
+                .split(RegExp(r'\s+'))
+                .every(
+                  '${_products[index].name} ${_products[index].category}'
+                      .contains,
+                ))
           index,
     ];
     if (_sort == '낮은 가격순') {
       visible.sort((a, b) => _products[a].price.compareTo(_products[b].price));
+    } else if (_sort == 'AI 적합도순') {
+      visible.sort((a, b) => _products[b].score.compareTo(_products[a].score));
     }
     return ColoredBox(
       color: _mint,
@@ -185,17 +260,92 @@ class _ShoppingTabState extends State<ShoppingTab> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    TextField(
-                      onChanged: (value) => setState(() => _query = value),
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.search, color: _muted),
-                        hintText: '밀키트, 도시락, 샐러드 검색',
-                        fillColor: _chip,
-                        isDense: true,
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(13),
-                          borderSide: BorderSide.none,
-                        ),
+                    LayoutBuilder(
+                      builder: (context, box) => RawAutocomplete<String>(
+                        optionsBuilder: (value) =>
+                            value.text.isEmpty ? _suggestions : const [],
+                        onSelected: (value) => setState(() => _query = value),
+                        fieldViewBuilder:
+                            (context, controller, focusNode, onSubmitted) =>
+                                TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  onChanged: (value) =>
+                                      setState(() => _query = value),
+                                  decoration: InputDecoration(
+                                    prefixIcon: const Icon(
+                                      Icons.search,
+                                      color: _muted,
+                                    ),
+                                    hintText: '밀키트, 도시락, 샐러드 검색',
+                                    fillColor: _chip,
+                                    isDense: true,
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(13),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                ),
+                        optionsViewBuilder: (context, onSelected, options) =>
+                            Align(
+                              alignment: Alignment.topLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Material(
+                                  color: Colors.white,
+                                  clipBehavior: Clip.antiAlias,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    side: const BorderSide(
+                                      color: AppTheme.border,
+                                    ),
+                                  ),
+                                  child: SizedBox(
+                                    width: box.maxWidth,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Padding(
+                                          padding: EdgeInsets.fromLTRB(
+                                            16,
+                                            12,
+                                            16,
+                                            4,
+                                          ),
+                                          child: Text(
+                                            '추천 검색어',
+                                            style: _caption,
+                                          ),
+                                        ),
+                                        for (final option in options)
+                                          InkWell(
+                                            onTap: () => onSelected(option),
+                                            child: Container(
+                                              height: 44,
+                                              alignment: Alignment.centerLeft,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                  ),
+                                              child: Text(
+                                                option,
+                                                style: const TextStyle(
+                                                  color: _green,
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        const SizedBox(height: 6),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                       ),
                     ),
                   ],
@@ -260,31 +410,20 @@ class _ShoppingTabState extends State<ShoppingTab> {
                   const SizedBox(height: 12),
                   const Text('카테고리 선택', style: _caption),
                   const SizedBox(height: 5),
-                  _panel([
-                    DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _category,
-                        isExpanded: true,
-                        isDense: true,
-                        items:
-                            [
-                                  '전체 상품',
-                                  ..._products.map(
-                                    (product) => product.category,
-                                  ),
-                                ]
-                                .map(
-                                  (value) => DropdownMenuItem(
-                                    value: value,
-                                    child: Text(value, style: _bold),
-                                  ),
-                                )
-                                .toList(),
-                        onChanged: (value) =>
-                            setState(() => _category = value!),
-                      ),
-                    ),
-                  ]),
+                  AppMenu<String>(
+                    tooltip: '카테고리 선택',
+                    width: 362,
+                    selected: _category,
+                    items: [
+                      for (final value in [
+                        '전체 상품',
+                        ..._products.map((product) => product.category),
+                      ])
+                        AppMenuItem(value, value),
+                    ],
+                    onSelected: (value) => setState(() => _category = value),
+                    child: _panel([_menuLabel(_category, bold: true)]),
+                  ),
                   Row(
                     children: [
                       Expanded(
@@ -293,26 +432,21 @@ class _ShoppingTabState extends State<ShoppingTab> {
                           style: const TextStyle(color: _muted),
                         ),
                       ),
-                      DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _sort,
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'AI 추천순',
-                              child: Text(
-                                'AI 추천순',
-                                style: TextStyle(
-                                  color: _ai,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: '낮은 가격순',
-                              child: Text('낮은 가격순'),
-                            ),
-                          ],
-                          onChanged: (value) => setState(() => _sort = value!),
+                      AppMenu<String>(
+                        tooltip: '정렬 선택',
+                        width: 160,
+                        selected: _sort,
+                        items: const [
+                          AppMenuItem('AI 추천순', 'AI 추천순'),
+                          AppMenuItem('낮은 가격순', '낮은 가격순'),
+                          AppMenuItem('AI 적합도순', 'AI 적합도순'),
+                        ],
+                        onSelected: (value) => setState(() => _sort = value),
+                        child: _menuLabel(
+                          _sort,
+                          color: _sort == 'AI 추천순' ? _ai : null,
+                          bold: _sort == 'AI 추천순',
+                          fill: false,
                         ),
                       ),
                     ],
@@ -375,70 +509,80 @@ class _ShoppingTabState extends State<ShoppingTab> {
     final product = _products[index];
     final expanded = _compared.contains(index);
     return _panel([
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
+      Semantics(
+        button: true,
+        hint: '상품 상세 보기',
+        child: InkWell(
+          onTap: () => _productSheet(index),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _thumb(index, 92),
-              Positioned(
-                left: 3,
-                top: 3,
-                child: Material(
-                  color: Colors.white,
-                  shape: const CircleBorder(),
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => setState(() {
-                      if (!_favorites.add(index)) _favorites.remove(index);
-                    }),
-                    child: Padding(
-                      padding: const EdgeInsets.all(5),
-                      child: Icon(
-                        _favorites.contains(index)
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                        size: 15,
-                        color: _muted,
+              Stack(
+                children: [
+                  _thumb(index, 92),
+                  Positioned(
+                    left: 3,
+                    top: 3,
+                    child: Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () => setState(() {
+                          if (!_favorites.add(index)) _favorites.remove(index);
+                        }),
+                        child: Padding(
+                          padding: const EdgeInsets.all(5),
+                          child: Icon(
+                            _favorites.contains(index)
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            size: 15,
+                            color: _muted,
+                          ),
+                        ),
                       ),
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 4,
+                      children: [
+                        _tag(product.category),
+                        _tag('AI 추천', ai: true),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(product.name, style: _bold),
+                    Text(product.nutrition, style: _caption),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Text(
+                          'AI 적합도 ${product.score}%',
+                          style: const TextStyle(
+                            color: _ai,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: _bar(product.score / 100, _ai)),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 5,
-                  runSpacing: 4,
-                  children: [_tag(product.category), _tag('AI 추천', ai: true)],
-                ),
-                const SizedBox(height: 5),
-                Text(product.name, style: _bold),
-                Text(product.nutrition, style: _caption),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    Text(
-                      'AI 적합도 ${product.score}%',
-                      style: const TextStyle(
-                        color: _ai,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: _bar(product.score / 100, _ai)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
       const SizedBox(height: 14),
       const Text('최저가 (배송비 포함)', style: _caption),
@@ -484,10 +628,10 @@ class _ShoppingTabState extends State<ShoppingTab> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: _button(
-              '장바구니 담기',
-              () => _change(index, (_cart[index] ?? 0) + 1),
-            ),
+            child: _button('장바구니 담기', () {
+              _change(index, (_cart[index] ?? 0) + 1);
+              _toast('장바구니에 담았어요');
+            }),
           ),
         ],
       ),
@@ -525,11 +669,13 @@ class _ShoppingTabState extends State<ShoppingTab> {
                         Expanded(
                           child: _stepper(
                             item.value,
-                            (value) => _change(item.key, value),
+                            (value) => value <= 0
+                                ? _confirmRemove(item.key)
+                                : _change(item.key, value),
                           ),
                         ),
                         TextButton(
-                          onPressed: () => _change(item.key, 0),
+                          onPressed: () => _confirmRemove(item.key),
                           child: const Text(
                             '빼기',
                             style: TextStyle(color: Color(0xFFB54E45)),
@@ -586,32 +732,50 @@ class _ShoppingTabState extends State<ShoppingTab> {
       ),
       _section(
         '배송지',
-        _panel([
-          _pair('홍길동', '기본', strong: true),
-          const SizedBox(height: 6),
-          const Text(
-            '경기도 성남시 수정구 ○○로 123\n101동 1001호 · 010-0000-1234',
-            style: _caption,
-          ),
-        ]),
-      ),
-      _panel([
-        DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: _delivery,
-            isExpanded: true,
-            items: const [
-              DropdownMenuItem(
-                value: '문 앞에 놓아 주세요',
-                child: Text('문 앞에 놓아 주세요'),
+        AppMenu<int>(
+          tooltip: '배송지 선택',
+          width: 362,
+          selected: _address,
+          items: [
+            for (var i = 0; i < userAddresses.length; i++)
+              AppMenuItem(i, '${userAddresses[i][1]} · ${userAddresses[i][3]}'),
+            const AppMenuItem(-1, '새 배송지 추가'),
+          ],
+          onSelected: (value) =>
+              value == -1 ? _addAddress() : setState(() => _address = value),
+          child: _panel([
+            if (_address < userAddresses.length) ...[
+              _pair(
+                userAddresses[_address][1],
+                _address == 0 ? '기본' : '',
+                strong: true,
               ),
-              DropdownMenuItem(value: '직접 받을게요', child: Text('직접 받을게요')),
-              DropdownMenuItem(value: '기타', child: Text('기타')),
-            ],
-            onChanged: (value) => setState(() => _delivery = value!),
-          ),
+              const SizedBox(height: 6),
+              Text(
+                '${userAddresses[_address][3]}\n${userAddresses[_address][4]} · ${userAddresses[_address][2]}',
+                style: _caption,
+              ),
+            ] else
+              const Text('배송지를 추가해 주세요', style: _caption),
+          ]),
         ),
-      ]),
+      ),
+      AppMenu<String>(
+        tooltip: '배송 요청사항 선택',
+        width: 362,
+        selected: _delivery,
+        items: [
+          for (final value in [
+            '문 앞에 놓아 주세요',
+            '경비실에 맡겨 주세요',
+            '직접 받을게요',
+            '배송 전에 연락 주세요',
+          ])
+            AppMenuItem(value, value),
+        ],
+        onSelected: (value) => setState(() => _delivery = value),
+        child: _panel([_menuLabel(_delivery)]),
+      ),
       const SizedBox(height: 10),
       _section(
         '포인트 사용',
@@ -637,7 +801,22 @@ class _ShoppingTabState extends State<ShoppingTab> {
           const Text('500P부터 100P 단위로 사용할 수 있어요. (1P = 1원)', style: _caption),
         ]),
       ),
-      _section('결제 수단', _panel([const Text('등록한 카드 ···· 1234')])),
+      _section(
+        '결제 수단',
+        AppMenu<String>(
+          tooltip: '결제 수단 선택',
+          width: 362,
+          selected: _payment,
+          items: [
+            for (final value in [...userCards, '새 카드 등록', '계좌이체'])
+              AppMenuItem(value, value),
+          ],
+          onSelected: (value) => value == '새 카드 등록'
+              ? _addCard()
+              : setState(() => _payment = value),
+          child: _panel([_menuLabel(_payment)]),
+        ),
+      ),
       _section(
         '결제 금액',
         _panel([
@@ -648,41 +827,151 @@ class _ShoppingTabState extends State<ShoppingTab> {
           _pair('최종 결제 금액', _won(_subtotal - _points), strong: true),
         ]),
       ),
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        value: _agreed,
-        onChanged: (value) => setState(() => _agreed = value ?? false),
-        title: const Text('주문 내용을 확인했고 결제에 동의해요.'),
+      if (_payBlocker != null) Text(_payBlocker!, style: _caption),
+      Material(
+        type: MaterialType.transparency,
+        child: CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _agreed,
+          onChanged: (value) => setState(() => _agreed = value ?? false),
+          title: const Text('주문 내용을 확인했고 결제에 동의해요.'),
+        ),
       ),
     ],
     action: _button(
       '${_won(_subtotal - _points)} 결제하기',
-      !_agreed || _cart.isEmpty ? null : _placeOrder,
+      _payBlocker == null ? _placeOrder : null,
     ),
   );
+
+  // 결제 버튼이 꺼진 이유. 결제할 수 있으면 null.
+  String? get _payBlocker => _cart.isEmpty
+      ? '담은 상품이 없어요.'
+      : userAddresses.isEmpty
+      ? '배송지를 먼저 추가해 주세요.'
+      : !_agreed
+      ? '주문 내용 확인에 동의하면 결제할 수 있어요.'
+      : null;
 
   Future<void> _pickPoints() async {
     final value = await showModalBottomSheet<int>(
       context: context,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const ListTile(title: Text('포인트 사용', style: _bold)),
-            for (final value in [
-              0,
-              for (var points = 500; points <= _pointLimit; points += 100)
-                points,
-            ])
-              ListTile(
-                title: Text(value == 0 ? '사용 안 함' : '$value P'),
-                onTap: () => Navigator.pop(context, value),
-              ),
-          ],
-        ),
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 402),
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _PointSheet(
+        balance: _balance,
+        limit: _pointLimit,
+        initial: _points > 0 ? _points : (_pointLimit >= 500 ? 500 : 0),
       ),
     );
     if (mounted && value != null) setState(() => _points = value);
+  }
+
+  Future<void> _productSheet(int index) {
+    final product = _products[index];
+    final sellers = _sellers.take(index == 3 ? 2 : 3).toList();
+    return showModalBottomSheet<void>(
+      context: context,
+      constraints: const BoxConstraints(maxWidth: 402),
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                product.name,
+                style: const TextStyle(
+                  color: _green,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${product.category} · ${product.nutrition}',
+                style: _caption,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'AI 적합도 ${product.score}%',
+                style: const TextStyle(
+                  color: _ai,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final seller in sellers)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: _pair(
+                    '${seller.name} · ${seller.shipping}',
+                    _won(product.price + seller.extra),
+                    strong: true,
+                  ),
+                ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 100,
+                    height: 48,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _chip,
+                        foregroundColor: _green,
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _subscriptionPage(index);
+                      },
+                      child: const Text('정기 배송'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 100,
+                    height: 48,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _green,
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _change(index, (_cart[index] ?? 0) + 1);
+                        _toast('장바구니에 담았어요');
+                      },
+                      child: const FittedBox(
+                        child: Text('장바구니 담기', style: _bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _placeOrder() => setState(() {
@@ -690,6 +979,11 @@ class _ShoppingTabState extends State<ShoppingTab> {
       items: Map.of(_cart),
       total: _subtotal - _points,
       points: _points,
+      payment: _payment,
+      // 주문한 때의 배송지를 그대로 남긴다(나중에 배송지를 고쳐도 바뀌지 않는다).
+      address: _address < userAddresses.length
+          ? '${userAddresses[_address][3]}\n${userAddresses[_address][4]} (${userAddresses[_address][1]})'
+          : '',
     ));
     _balance -= _points;
     _cart.clear();
@@ -697,108 +991,237 @@ class _ShoppingTabState extends State<ShoppingTab> {
     _view = ShoppingView.complete;
   });
 
+  int _qty(Map<int, int> items) => items.values.fold(0, (a, b) => a + b);
+
   String _orderName(Map<int, int> items) {
     final first = _products[items.keys.first].name;
     return items.length == 1 ? first : '$first 외 ${items.length - 1}개';
   }
 
-  Widget _complete() =>
-      _page('주문 완료', '쇼핑', () => _open(ShoppingView.catalog), [
-        const SizedBox(height: 24),
-        const Icon(Icons.check_circle, color: Color(0xFF11836C), size: 56),
-        const SizedBox(height: 12),
-        Center(
-          child: Text(
-            _orders.isEmpty ? '완료된 주문이 없어요' : '주문이 완료됐어요',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
+  Widget
+  _complete() => _page('주문 완료', '쇼핑', () => _open(ShoppingView.catalog), [
+    const SizedBox(height: 24),
+    const Icon(Icons.check_circle, color: Color(0xFF11836C), size: 56),
+    const SizedBox(height: 12),
+    Center(
+      child: Text(
+        _orders.isEmpty ? '완료된 주문이 없어요' : '주문이 완료됐어요',
+        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      ),
+    ),
+    const SizedBox(height: 14),
+    if (_orders.isNotEmpty)
+      _panel([
+        _pair(
+          '주문 상품',
+          '${_orderName(_orders.first.items)} · ${_qty(_orders.first.items)}개',
         ),
-        const SizedBox(height: 14),
-        if (_orders.isNotEmpty)
-          _panel([
-            _pair('주문 상품', _orderName(_orders.first.items)),
-            const Divider(color: AppTheme.border),
-            _pair('사용 포인트', '${_orders.first.points}P'),
-            _pair('결제 금액', _won(_orders.first.total), strong: true),
-            const Text('등록한 카드 ···· 1234', style: _caption),
-          ]),
-        const SizedBox(height: 18),
-        _button('주문 내역 보기', () => _open(ShoppingView.orders)),
-        TextButton(
-          onPressed: () => _open(ShoppingView.catalog),
-          child: const Text('쇼핑 계속하기'),
-        ),
-      ]);
+        const Divider(color: AppTheme.border),
+        _pair('사용 포인트', '${_orders.first.points}P'),
+        _pair('결제 금액', _won(_orders.first.total), strong: true),
+        Text(_orders.first.payment, style: _caption),
+      ]),
+    const SizedBox(height: 18),
+    _button('주문 내역 보기', () => _open(ShoppingView.orders)),
+    TextButton(
+      onPressed: () => _open(ShoppingView.catalog),
+      child: const Text('쇼핑 계속하기'),
+    ),
+  ]);
 
-  Widget _history() =>
-      _page('주문 · 구독 내역', '쇼핑', () => _open(ShoppingView.catalog), [
-        _section(
-          '정기 구독',
-          _panel([
-            if (_subscription case final index?)
-              ListTile(
+  Widget _history() => _page(
+    '주문 · 구독 내역',
+    '쇼핑',
+    () => _open(ShoppingView.catalog),
+    [
+      _section(
+        '정기 구독',
+        _panel([
+          if (_subscription case final index?)
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(_products[index].name),
                 subtitle: Text('$_cycle $_day요일 · $_quantity개 · 건너뛰기 $_skips회'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _subscriptionPage(index, managing: true),
-              )
-            else
-              const Text('진행 중인 정기 구독이 없어요.', style: _caption),
-          ]),
-        ),
-        _section(
-          '주문 내역',
-          _panel([
-            if (_orders.isEmpty) const Text('주문 내역이 없어요.', style: _caption),
-            for (final order in _orders)
-              ListTile(
+              ),
+            )
+          else
+            const Text('진행 중인 정기 구독이 없어요.', style: _caption),
+        ]),
+      ),
+      _section(
+        '주문 내역',
+        _panel([
+          if (_orders.isEmpty) const Text('주문 내역이 없어요.', style: _caption),
+          for (final order in _orders)
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(_orderName(order.items)),
-                subtitle: const Text('결제 완료'),
+                subtitle: Text('2026.10.21 · ${_qty(order.items)}개 · 결제 완료'),
                 trailing: Text(_won(order.total), style: _bold),
-                onTap: () => _detail(order.items, order.total, order.points),
+                onTap: () => _detail(order),
               ),
-          ]),
-        ),
-      ]);
+            ),
+        ]),
+      ),
+    ],
+  );
 
-  void _detail(Map<int, int> items, int total, int points) =>
-      Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (context) => Scaffold(
-            backgroundColor: _mint,
-            body: _page('주문 상세', '내역', () => Navigator.pop(context), [
-              _section(
-                '주문 상품',
-                _panel([
-                  for (final item in items.entries)
-                    _pair(_products[item.key].name, '${item.value}개'),
-                ]),
+  // 예시 주문일(앱의 기준 날짜)과 도착 예정일. 서버 연동 전 고정값.
+  void _detail(
+    ({
+      Map<int, int> items,
+      int total,
+      int points,
+      String payment,
+      String address,
+    })
+    order,
+  ) => Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (context) => Scaffold(
+        backgroundColor: _mint,
+        body: _page('주문 상세', '내역', () => Navigator.pop(context), [
+          _panel([
+            Text(
+              _orderName(order.items),
+              style: const TextStyle(
+                color: _green,
+                fontWeight: FontWeight.w700,
               ),
-              _section(
-                '배송 상태',
-                _panel([
-                  const Text('배송 준비 중', style: _bold),
-                  const Text('주문 완료 → 배송 시작 → 배송 완료', style: _caption),
-                ]),
+            ),
+            const SizedBox(height: 6),
+            Text('2026.10.21 주문 · ${_qty(order.items)}개', style: _caption),
+          ]),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '배송 상태',
+                    style: TextStyle(
+                      color: _green,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Text(
+                  '배송 준비 중',
+                  style: TextStyle(
+                    color: Color(0xFF2B8A9C),
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _panel([
+            _steps(0),
+            const Divider(height: 28, color: AppTheme.border),
+            _timeline('2026.10.21', '주문 완료'),
+            const SizedBox(height: 10),
+            _timeline('10.22 (목)', '도착 예정'),
+          ]),
+          const SizedBox(height: 12),
+          _section('배송지', _panel([Text(order.address)])),
+          _section(
+            '결제 정보',
+            _panel([
+              _pair('상품 금액', _won(order.total + order.points)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('포인트 사용', style: TextStyle(color: _muted)),
+                  ),
+                  Text(
+                    '-${_won(order.points)}',
+                    style: const TextStyle(
+                      color: Color(0xFF2B8A9C),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-              _section(
-                '배송지',
-                _panel([const Text('경기도 성남시 수정구 ○○로 123\n101동 1001호 (홍길동)')]),
+              const Divider(height: 24, color: AppTheme.border),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Expanded(child: Text('결제 금액', style: _bold)),
+                  Text(
+                    _won(order.total),
+                    style: const TextStyle(
+                      color: _green,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-              _section(
-                '결제 정보',
-                _panel([
-                  _pair('상품 금액', _won(total + points)),
-                  _pair('포인트 사용', '-${_won(points)}'),
-                  _pair('결제 금액', _won(total), strong: true),
-                ]),
-              ),
+              const SizedBox(height: 10),
+              Text(order.payment, style: _caption),
+              const SizedBox(height: 4),
+              Text('사용한 포인트 ${order.points}P', style: _caption),
             ]),
           ),
-        ),
-      );
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 56,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFB54E45),
+                side: const BorderSide(color: Color(0xFFE3B7B2)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () => _cancelOrder(context, order),
+              child: const Text('주문 취소 요청', style: _bold),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text('신선식품은 상품에 문제가 있을 때만 환불할 수 있어요.', style: _caption),
+          const SizedBox(height: 6),
+          const Text('주문을 취소하면 사용한 포인트는 되돌려 드려요.', style: _caption),
+        ]),
+      ),
+    ),
+  );
+
+  Future<void> _cancelOrder(
+    BuildContext detailContext,
+    ({
+      Map<int, int> items,
+      int total,
+      int points,
+      String payment,
+      String address,
+    })
+    order,
+  ) async {
+    final confirmed = await showConfirmPopup(
+      detailContext,
+      title: '주문을 취소할까요?',
+      message: '사용한 포인트는 되돌려 드려요.',
+      confirmLabel: '주문 취소',
+    );
+    if (!confirmed || !mounted || !detailContext.mounted) return;
+    setState(() {
+      _orders.remove(order);
+      _balance += order.points;
+    });
+    Navigator.pop(detailContext);
+    _toast('주문을 취소했어요');
+  }
 
   Future<void> _subscriptionPage(int index, {bool managing = false}) async {
     final product = _products[index];
@@ -806,6 +1229,7 @@ class _ShoppingTabState extends State<ShoppingTab> {
     var day = managing ? _day : '월';
     var quantity = managing ? _quantity : 1;
     var skips = managing ? _skips : 0;
+    var firstDate = '10월 26일 (월)';
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (context) => StatefulBuilder(
@@ -878,41 +1302,52 @@ class _ShoppingTabState extends State<ShoppingTab> {
                   ),
                 ]),
                 const SizedBox(height: 10),
-                _panel([
-                  _pair(
-                    managing ? '다음 배송' : '첫 배송일',
-                    '다음 $day요일',
-                    strong: true,
+                if (managing)
+                  _panel([_pair('다음 배송', '다음 $day요일', strong: true)])
+                else
+                  AppMenu<String>(
+                    tooltip: '첫 배송일 선택',
+                    width: 362,
+                    selected: firstDate,
+                    items: [
+                      for (final value in [
+                        '10월 26일 (월)',
+                        '10월 28일 (수)',
+                        '11월 2일 (월)',
+                      ])
+                        AppMenuItem(value, value),
+                    ],
+                    onSelected: (value) => update(() => firstDate = value),
+                    child: _panel([
+                      Row(
+                        children: [
+                          const Text('첫 배송일', style: TextStyle(color: _muted)),
+                          const Spacer(),
+                          Text(firstDate, style: _bold),
+                          const Icon(Icons.keyboard_arrow_down, color: _muted),
+                        ],
+                      ),
+                    ]),
                   ),
-                ]),
                 if (managing) ...[
                   const SizedBox(height: 10),
                   OutlinedButton(
-                    onPressed: () => update(() => skips++),
+                    onPressed: () {
+                      update(() => skips++);
+                      _toast('다음 배송 1회를 건너뛰어요');
+                    },
                     child: Text('다음 배송 1회 건너뛰기 · $skips회'),
                   ),
                   TextButton(
                     onPressed: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (dialogContext) => AlertDialog(
-                          title: const Text('구독 해지'),
-                          content: const Text('정기 배송 구독을 해지하시겠어요?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.pop(dialogContext, false),
-                              child: const Text('유지하기'),
-                            ),
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.pop(dialogContext, true),
-                              child: const Text('구독 해지'),
-                            ),
-                          ],
-                        ),
+                      final confirmed = await showConfirmPopup(
+                        context,
+                        title: '구독을 해지할까요?',
+                        message: '다음 배송부터 받을 수 없어요.\n이미 결제한 배송은 그대로 도착해요.',
+                        confirmLabel: '해지하기',
+                        cancelLabel: '유지하기',
                       );
-                      if (confirmed == true && context.mounted) {
+                      if (confirmed && context.mounted) {
                         Navigator.pop(context, false);
                       }
                     },
@@ -934,6 +1369,8 @@ class _ShoppingTabState extends State<ShoppingTab> {
     if (result == null || !mounted) return;
     setState(() {
       _subscription = result ? index : null;
+      hasSubscription = _subscription != null;
+      saveUserData();
       _cycle = cycle;
       _day = day;
       _quantity = quantity;
@@ -1049,12 +1486,10 @@ Widget _pair(String label, String value, {bool strong = false}) => Row(
       ),
     ),
     const SizedBox(width: 8),
-    Flexible(
-      child: Text(
-        value,
-        textAlign: TextAlign.end,
-        style: strong ? _bold : const TextStyle(color: _muted),
-      ),
+    Text(
+      value,
+      textAlign: TextAlign.end,
+      style: strong ? _bold : const TextStyle(color: _muted),
     ),
   ],
 );
@@ -1136,6 +1571,84 @@ Widget _stepper(int quantity, ValueChanged<int> onChanged, {int minimum = 0}) =>
       ],
     );
 
+Widget _menuLabel(
+  String text, {
+  Color? color,
+  bool bold = false,
+  bool fill = true,
+}) {
+  final label = Text(
+    text,
+    style: TextStyle(color: color, fontWeight: bold ? FontWeight.w700 : null),
+  );
+  return Padding(
+    padding: EdgeInsets.symmetric(vertical: fill ? 0 : 10),
+    child: Row(
+      mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        if (fill) Expanded(child: label) else label,
+        const Icon(Icons.keyboard_arrow_down, color: _muted),
+      ],
+    ),
+  );
+}
+
+Widget _steps(int current) => LayoutBuilder(
+  builder: (context, box) {
+    final w = box.maxWidth;
+    const labels = ['주문 완료', '배송 시작', '배송 완료'];
+    return SizedBox(
+      height: 48,
+      child: Stack(
+        children: [
+          for (var i = 0; i < 2; i++)
+            Positioned(
+              left: w / 6 + i * w / 3,
+              top: 5,
+              width: w / 3,
+              height: 4,
+              child: ColoredBox(color: i < current ? _cyan : AppTheme.border),
+            ),
+          for (var i = 0; i < 3; i++)
+            Positioned(
+              left: i * w / 3,
+              top: 0,
+              width: w / 3,
+              child: Column(
+                children: [
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i <= current ? _cyan : Colors.white,
+                      border: Border.all(color: _cyan, width: 2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    labels[i],
+                    style: TextStyle(
+                      color: i <= current ? _green : _muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  },
+);
+
+Widget _timeline(String date, String label) => Row(
+  children: [
+    SizedBox(width: 84, child: Text(date, style: _caption)),
+    Text(label, style: const TextStyle(color: _green)),
+  ],
+);
+
 Widget _bar(double value, Color color) => LinearProgressIndicator(
   value: value,
   minHeight: 5,
@@ -1167,5 +1680,194 @@ class _Macro extends StatelessWidget {
         ),
       ),
     ],
+  );
+}
+
+class _PointSheet extends StatefulWidget {
+  const _PointSheet({
+    required this.balance,
+    required this.limit,
+    required this.initial,
+  });
+  final int balance;
+  final int limit;
+  final int initial;
+
+  @override
+  State<_PointSheet> createState() => _PointSheetState();
+}
+
+class _PointSheetState extends State<_PointSheet> {
+  late int _value = widget.initial;
+
+  // 사용 가능한 값: 0(사용 안 함) 또는 500P 이상 100P 단위, 최대 limit.
+  int _fit(int value) {
+    if (widget.limit < 500 || value <= 0) return 0;
+    if (value < 500) return 500;
+    return value > widget.limit ? widget.limit : value;
+  }
+
+  void _set(int value) => setState(() => _value = _fit(value));
+
+  String _p(int value) => _won(value).replaceFirst('원', 'P');
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppTheme.border,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '포인트 사용',
+                  style: TextStyle(
+                    color: _green,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: '닫기',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: _green),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              const Expanded(child: Text('보유 포인트', style: _caption)),
+              Text(_p(widget.balance), style: _bold),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+            decoration: BoxDecoration(
+              color: _chip.withValues(alpha: .6),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              children: [
+                _round(
+                  Icons.remove,
+                  '포인트 줄이기',
+                  _value > 0
+                      ? () => _set(_value <= 500 ? 0 : _value - 100)
+                      : null,
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text.rich(
+                      TextSpan(
+                        text: '$_value',
+                        style: const TextStyle(
+                          color: _green,
+                          fontSize: 40,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        children: const [
+                          TextSpan(
+                            text: '  P',
+                            style: TextStyle(
+                              color: _muted,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _round(
+                  Icons.add,
+                  '포인트 늘리기',
+                  _value < widget.limit
+                      ? () => _set(_value < 500 ? 500 : _value + 100)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _quick('+500', () => _set(_value + 500)),
+              const SizedBox(width: 8),
+              _quick('+1,000', () => _set(_value + 1000)),
+              const SizedBox(width: 8),
+              _quick('전액 사용', () => _set(widget.limit)),
+            ],
+          ),
+          const Divider(height: 32, color: AppTheme.border),
+          Row(
+            children: [
+              const Expanded(child: Text('사용 후 남는 포인트', style: _caption)),
+              Text(_p(widget.balance - _value), style: _bold),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '결제 금액에서 ${_won(_value)}이 빠져요.',
+            style: const TextStyle(color: Color(0xFF11836C), fontSize: 13),
+          ),
+          const SizedBox(height: 18),
+          const Text('500P부터 100P 단위로 쓸 수 있고, 결제 금액까지 사용해요.', style: _caption),
+          const SizedBox(height: 4),
+          const Text('주문을 취소하면 사용한 포인트는 되돌려 드려요.', style: _caption),
+          const SizedBox(height: 22),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: _button(
+              _value == 0 ? '사용 안 함' : '${_p(_value)} 사용하기',
+              () => Navigator.pop(context, _value),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _round(IconData icon, String tooltip, VoidCallback? onPressed) =>
+      IconButton.filled(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        style: IconButton.styleFrom(
+          fixedSize: const Size(44, 44),
+          backgroundColor: _chip,
+          foregroundColor: _green,
+        ),
+        icon: Icon(icon),
+      );
+
+  Widget _quick(String label, VoidCallback onPressed) => Expanded(
+    child: SizedBox(
+      height: 44,
+      child: FilledButton(
+        onPressed: widget.limit < 500 ? null : onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: _chip,
+          foregroundColor: _green,
+          padding: EdgeInsets.zero,
+        ),
+        child: Text(label, style: _bold),
+      ),
+    ),
   );
 }

@@ -15,7 +15,7 @@ void main() {
 
     await tester.pumpWidget(_app(store));
 
-    expect(find.text('프로필 이름'), findsOneWidget);
+    expect(find.text('김민지'), findsOneWidget);
     expect(find.text('오운완'), findsOneWidget);
     expect(find.text('3분 전'), findsOneWidget);
     expect(find.text('불꽃 보내기'), findsOneWidget);
@@ -152,8 +152,8 @@ void main() {
 
     await tester.tap(find.text('관심 없음'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('뒤로'));
-    await tester.pumpAndSettle();
+    // 관심 없음을 누르면 상세가 닫히고 목록으로 돌아간다.
     expect(find.text('open'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
   });
 }

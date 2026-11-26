@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/navigation/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
+import '../../../core/widgets/app_overlays.dart';
 import '../../../core/widgets/app_screen_frame.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -77,8 +79,34 @@ class _SplashScreenState extends State<SplashScreen> {
   );
 }
 
-class LoginScreen extends StatelessWidget {
+final _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  // 서버 연동 전이라 입력 여부만 확인한다. 실패 문구는 확정 전 임시.
+  void _login() {
+    if (!_emailPattern.hasMatch(_email.text.trim()) || _password.text.isEmpty) {
+      showAppToast(context, '이메일과 비밀번호를 확인해 주세요');
+      return;
+    }
+    Navigator.pushReplacementNamed(context, AppRoutes.home);
+  }
 
   @override
   Widget build(BuildContext context) => AppScreenFrame(
@@ -114,15 +142,17 @@ class LoginScreen extends StatelessWidget {
                       style: TextStyle(color: AppTheme.muted, fontSize: 14),
                     ),
                     const SizedBox(height: 20),
-                    const LabeledField(
+                    LabeledField(
                       label: '이메일',
                       hint: 'example@antifreeze.com',
+                      controller: _email,
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 16),
-                    const LabeledField(
+                    LabeledField(
                       label: '비밀번호',
                       hint: '비밀번호 입력',
+                      controller: _password,
                       obscureText: true,
                     ),
                     Align(
@@ -141,13 +171,18 @@ class LoginScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    PrimaryButton(
-                      label: '로그인',
-                      onPressed: () => Navigator.pushReplacementNamed(
-                        context,
-                        AppRoutes.home,
+                    PrimaryButton(label: '로그인', onPressed: _login),
+                    // 개발 중에만 보이는 지름길(디버그 빌드 전용, 릴리스에서는 사라진다).
+                    if (kDebugMode)
+                      Center(
+                        child: TextButton(
+                          onPressed: () => Navigator.pushReplacementNamed(
+                            context,
+                            AppRoutes.home,
+                          ),
+                          child: const Text('개발자 · 바로 홈으로'),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -192,6 +227,37 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   final _terms = [false, false, false];
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  void _next() {
+    final pw = _password.text;
+    final message = !_emailPattern.hasMatch(_email.text.trim())
+        ? '이메일 주소를 확인해 주세요'
+        : pw.length < 8 ||
+              !pw.contains(RegExp(r'[A-Za-z]')) ||
+              !pw.contains(RegExp(r'\d'))
+        ? '비밀번호는 영문, 숫자 포함 8자 이상이에요'
+        : pw != _confirm.text
+        ? '비밀번호가 서로 달라요'
+        : !(_terms[0] && _terms[1])
+        ? '필수 약관에 동의해 주세요'
+        : null;
+    if (message != null) {
+      showAppToast(context, message);
+      return;
+    }
+    Navigator.pushNamed(context, AppRoutes.onboardingProfile);
+  }
 
   @override
   Widget build(BuildContext context) => AppScreenFrame(
@@ -209,20 +275,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const LabeledField(
+                LabeledField(
                   label: '이메일',
                   hint: 'example@antifreeze.com',
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 16),
-                const LabeledField(
+                LabeledField(
                   label: '비밀번호',
                   hint: '영문, 숫자 포함 8자 이상',
+                  controller: _password,
                   obscureText: true,
                 ),
                 const SizedBox(height: 16),
-                const LabeledField(
+                LabeledField(
                   label: '비밀번호 확인',
                   hint: '한 번 더 입력',
+                  controller: _confirm,
                   obscureText: true,
                 ),
                 const SizedBox(height: 18),
@@ -235,11 +305,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
+                Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  clipBehavior: Clip.antiAlias,
                   child: Column(
                     children: [
                       CheckboxListTile(
@@ -280,11 +349,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                PrimaryButton(
-                  label: '다음',
-                  onPressed: () =>
-                      Navigator.pushNamed(context, AppRoutes.onboardingProfile),
-                ),
+                PrimaryButton(label: '다음', onPressed: _next),
               ],
             ),
           ),
@@ -354,7 +419,7 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
   void _submit() {
     final email = _email.trim();
     setState(() {
-      _submitted = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email);
+      _submitted = _emailPattern.hasMatch(email);
       _error = _submitted ? null : '이메일 주소를 확인해 주세요.';
     });
   }
@@ -415,9 +480,7 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                   Center(
                     child: TextButton(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('메일을 다시 보냈어요.')),
-                        );
+                        showAppToast(context, '비밀번호 재설정 메일을 보냈어요');
                       },
                       child: const Text('메일이 오지 않았나요?  다시 보내기'),
                     ),

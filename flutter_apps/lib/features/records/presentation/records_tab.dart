@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../../core/state/body_metrics.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
 import '../../../core/widgets/app_screen_frame.dart';
@@ -11,6 +13,7 @@ class RecordsTab extends StatefulWidget {
     required this.onOpenShop,
     required this.mealsByDate,
     required this.onMealSaved,
+    required this.onMealDeleted,
     required this.weights,
     required this.onWeightSaved,
     super.key,
@@ -19,6 +22,7 @@ class RecordsTab extends StatefulWidget {
   final VoidCallback onOpenShop;
   final Map<DateTime, Map<String, HomeMeal>> mealsByDate;
   final void Function(DateTime, HomeMeal) onMealSaved;
+  final void Function(DateTime, String) onMealDeleted;
   final Map<DateTime, double> weights;
   final void Function(DateTime, double) onWeightSaved;
 
@@ -302,8 +306,8 @@ class _RecordsTabState extends State<RecordsTab> {
   }
 
   bool _hasRecord(DateTime day) =>
-      widget.mealsByDate.containsKey(day) ||
-      day.year == 2026 && day.month == 10 && day.day >= 19 && day.day <= 21;
+      (widget.mealsByDate[day]?.isNotEmpty ?? false) ||
+      widget.weights.containsKey(day);
 
   Widget _calendarDay(
     DateTime month,
@@ -372,7 +376,7 @@ class _RecordsTabState extends State<RecordsTab> {
       (sum, meal) => sum + (int.tryParse(meal.values[index]) ?? 0),
     );
     final calories = total(1);
-    final remaining = (2442 - calories).clamp(0, 2442);
+    final remaining = (calorieGoal - calories).clamp(0, calorieGoal);
     return SafeArea(
       bottom: false,
       child: DefaultTextStyle.merge(
@@ -453,7 +457,12 @@ class _RecordsTabState extends State<RecordsTab> {
                   ),
                 ),
                 const SizedBox(width: 9),
-                const Expanded(child: Text('/ 2,442 kcal', style: _muted)),
+                Expanded(
+                  child: Text(
+                    '/ ${MaterialLocalizations.of(context).formatDecimal(calorieGoal)} kcal',
+                    style: _muted,
+                  ),
+                ),
                 Text(
                   '${MaterialLocalizations.of(context).formatDecimal(remaining)} 남음',
                   style: const TextStyle(
@@ -465,7 +474,7 @@ class _RecordsTabState extends State<RecordsTab> {
             ),
             const SizedBox(height: 10),
             LinearProgressIndicator(
-              value: (calories / 2442).clamp(0.0, 1.0),
+              value: (calories / calorieGoal).clamp(0.0, 1.0),
               minHeight: 8,
               borderRadius: BorderRadius.circular(8),
               color: _accent,
@@ -638,6 +647,20 @@ class _RecordsTabState extends State<RecordsTab> {
     ],
   );
 
+  Future<void> _showMealDetails(HomeMeal meal) async {
+    final date = _date;
+    final result = await showHomeSheet<({bool deleted, HomeMeal meal})>(
+      context,
+      _MealDetailsSheet(meal: meal, date: date),
+    );
+    if (!mounted || result == null) return;
+    if (result.deleted) {
+      widget.onMealDeleted(date, meal.type);
+    } else {
+      widget.onMealSaved(date, result.meal);
+    }
+  }
+
   Widget _meal(String label, HomeMeal? meal) {
     final values = meal?.values;
     final food = values?[0];
@@ -689,30 +712,164 @@ class _RecordsTabState extends State<RecordsTab> {
               decoration: const BoxDecoration(
                 border: Border(left: BorderSide(color: _line, width: 2)),
               ),
-              child: Column(
-                children: [
-                  Row(
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: () => _showMealDetails(meal!),
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(food, style: _bold.copyWith(fontSize: 15)),
-                            const SizedBox(height: 4),
-                            Text('$kcal kcal · $macros', style: _muted),
-                          ],
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(food, style: _bold.copyWith(fontSize: 15)),
+                                const SizedBox(height: 4),
+                                Text('$kcal kcal · $macros', style: _muted),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right,
+                            color: Color(0xFF9AAAA4),
+                          ),
+                        ],
                       ),
-                      const Icon(Icons.chevron_right, color: Color(0xFF9AAAA4)),
+                      const SizedBox(height: 12),
+                      const Divider(color: _line),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  const Divider(color: _line),
-                ],
+                ),
               ),
             ),
         ],
       ),
     );
   }
+}
+
+class _MealDetailsSheet extends StatefulWidget {
+  const _MealDetailsSheet({required this.meal, required this.date});
+  final HomeMeal meal;
+  final DateTime date;
+
+  @override
+  State<_MealDetailsSheet> createState() => _MealDetailsSheetState();
+}
+
+class _MealDetailsSheetState extends State<_MealDetailsSheet> {
+  late final _fields = [
+    for (final value in widget.meal.values.skip(1))
+      TextEditingController(text: value),
+  ];
+
+  @override
+  void dispose() {
+    for (final field in _fields) {
+      field.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${widget.meal.type} 식단 상세',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+          IconButton(
+            tooltip: '닫기',
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+      Text(
+        MaterialLocalizations.of(context).formatFullDate(widget.date),
+        style: const TextStyle(color: AppTheme.muted),
+      ),
+      const SizedBox(height: 20),
+      Text(
+        widget.meal.values[0],
+        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 16),
+      for (var i = 0; i < _fields.length; i++)
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                ['칼로리', '탄수화물', '단백질', '지방'][i],
+                style: const TextStyle(color: AppTheme.muted),
+              ),
+            ),
+            SizedBox(
+              width: 110,
+              child: TextField(
+                controller: _fields[i],
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                textAlign: TextAlign.end,
+                decoration: const InputDecoration(
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  hintText: '0',
+                ),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              i == 0 ? 'kcal' : 'g',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      const SizedBox(height: 20),
+      PrimaryButton(
+        label: '저장',
+        onPressed: () => Navigator.pop(context, (
+          deleted: false,
+          meal: (
+            type: widget.meal.type,
+            values: [
+              widget.meal.values[0],
+              for (final field in _fields)
+                (int.tryParse(field.text) ?? 0).toString(),
+            ],
+          ),
+        )),
+      ),
+      const SizedBox(height: 10),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFDF5050),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          onPressed: () =>
+              Navigator.pop(context, (deleted: true, meal: widget.meal)),
+          child: const Text(
+            '식단 삭제',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+    ],
+  );
 }

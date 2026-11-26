@@ -61,6 +61,10 @@ class _HomeMealSheetState extends State<HomeMealSheet> {
     ));
   }
 
+  // 음식 DB·사진 연동 전 임시 안내. 시트가 토스트를 가리므로 시트 안에 문구를 보여 준다.
+  bool _soon = false;
+  void _comingSoon() => setState(() => _soon = true);
+
   @override
   Widget build(BuildContext context) {
     final today = widget.date ?? DateTime.now();
@@ -136,6 +140,7 @@ class _HomeMealSheetState extends State<HomeMealSheet> {
         ),
         const SizedBox(height: 12),
         _MealSheetRow(
+          onTap: _comingSoon,
           icon: Icons.photo_camera_outlined,
           title: '사진',
           subtitle: '찍은 음식을 사진으로 남겨 두세요',
@@ -188,46 +193,72 @@ class _HomeMealSheetState extends State<HomeMealSheet> {
           ),
         ),
         const SizedBox(height: 12),
-        _MealSheetRow(icon: Icons.search, title: '음식 DB에서 찾기'),
+        _MealSheetRow(
+          onTap: _comingSoon,
+          icon: Icons.search,
+          title: '음식 DB에서 찾기',
+        ),
+        if (_soon)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Text(
+              '사진과 음식 DB 검색은 준비 중이에요. 지금은 직접 입력해 주세요.',
+              style: TextStyle(color: AppTheme.muted, fontSize: 12),
+            ),
+          ),
       ],
     );
   }
 }
 
 class _MealSheetRow extends StatelessWidget {
-  const _MealSheetRow({required this.icon, required this.title, this.subtitle});
+  const _MealSheetRow({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+  });
+
+  final VoidCallback onTap;
 
   final IconData icon;
   final String title;
   final String? subtitle;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF0F5F3),
+  Widget build(BuildContext context) => Material(
+    color: const Color(0xFFF0F5F3),
+    borderRadius: BorderRadius.circular(14),
+    child: InkWell(
+      onTap: onTap,
       borderRadius: BorderRadius.circular(14),
-    ),
-    child: Row(
-      children: [
-        Icon(icon, size: 20, color: AppTheme.muted),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title),
-              if (subtitle != null)
-                Text(
-                  subtitle!,
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 12),
-                ),
-            ],
-          ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppTheme.muted),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title),
+                  if (subtitle != null)
+                    Text(
+                      subtitle!,
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (subtitle == null)
+              const Icon(Icons.chevron_right, size: 18, color: AppTheme.muted),
+          ],
         ),
-        if (subtitle == null)
-          const Icon(Icons.chevron_right, size: 18, color: AppTheme.muted),
-      ],
+      ),
     ),
   );
 }

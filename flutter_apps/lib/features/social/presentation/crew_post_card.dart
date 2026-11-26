@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_overlays.dart';
 import 'post_detail_screen.dart';
+import 'post_moderation.dart';
 
 /// 크루 메인의 피드 게시물 한 개 (Figma SOC-03). 인스타그램 피드처럼
 /// 머리글, 사진, 좋아요·댓글·불꽃 보내기, 캡션, 시간 순서로 쌓인다.
@@ -67,13 +68,13 @@ class CrewPostCard extends StatelessWidget {
               ],
             ),
           ),
-          const AppMenu<String>(
+          AppMenu<String>(
             tooltip: '게시물 메뉴',
-            items: [
-              AppMenuItem('hide', '관심 없음'),
-              AppMenuItem('report', '신고하기'),
-            ],
-            child: Padding(
+            width: 164,
+            items: postMenuItems(mine: postId < 0),
+            onSelected: (action) =>
+                handlePostMenu(context, action: action, postId: postId),
+            child: const Padding(
               padding: EdgeInsets.all(10),
               child: Icon(Icons.more_horiz, color: AppTheme.muted),
             ),

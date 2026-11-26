@@ -10,7 +10,10 @@ import '../../social/presentation/social_tab.dart';
 import '../../records/presentation/records_tab.dart';
 
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/state/user_data.dart';
+import '../../../core/state/body_metrics.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_overlays.dart';
 import '../../../core/widgets/app_screen_frame.dart';
 import 'home_detail_screens.dart';
 import 'home_record_sheets.dart';
@@ -36,10 +39,14 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   late int _index = widget.initialIndex;
-  HomeMetrics _metrics = (height: 172, weight: 68.2, goal: 63);
+  HomeMetrics _metrics = (
+    height: double.tryParse(userProfile['height']!) ?? 175,
+    weight: double.tryParse(userProfile['weight']!) ?? 74,
+    goal: double.tryParse(userProfile['goal']!) ?? 68,
+  );
 
   static final _dashboardDate = DateTime(2026, 10, 21);
-  final _weights = <DateTime, double>{_dashboardDate: 68.2};
+  late final _weights = <DateTime, double>{_dashboardDate: _metrics.weight};
 
   final _mealsByDate = <DateTime, Map<String, HomeMeal>>{
     DateTime(2026, 10, 21): {
@@ -52,19 +59,36 @@ class _MainShellState extends State<MainShell> {
     setState(() => (_mealsByDate[date] ??= {})[meal.type] = meal);
   }
 
+  void _deleteMeal(DateTime date, String type) {
+    setState(() {
+      final meals = _mealsByDate[date];
+      meals?.remove(type);
+      if (meals != null && meals.isEmpty) _mealsByDate.remove(date);
+    });
+  }
+
   void _updateHomeMetrics(HomeMetrics metrics) {
     setState(() {
       if (metrics.weight != _metrics.weight) {
         _weights[_dashboardDate] = metrics.weight;
       }
       _metrics = metrics;
+      _syncProfile();
     });
+  }
+
+  // 홈에서 고친 키·체중·목표를 프로필과 같은 값으로 맞춘다.
+  void _syncProfile() {
+    userProfile['height'] = numText(_metrics.height);
+    userProfile['weight'] = numText(_metrics.weight);
+    userProfile['goal'] = numText(_metrics.goal);
   }
 
   void _saveWeight(DateTime date, double weight) {
     setState(() {
       _weights[date] = weight;
       _metrics = (height: _metrics.height, weight: weight, goal: _metrics.goal);
+      _syncProfile();
     });
   }
 
@@ -94,6 +118,7 @@ class _MainShellState extends State<MainShell> {
               onWeightSaved: _saveWeight,
               mealsByDate: _mealsByDate,
               onMealSaved: _saveMeal,
+              onMealDeleted: _deleteMeal,
             ),
             SocialTab(initialView: widget.initialSocialView),
             ShoppingTab(
@@ -198,21 +223,7 @@ class _HomeTabState extends State<_HomeTab> {
     );
     if (!mounted || meal == null) return;
     widget.onMealSaved(meal);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: const Color(0xFF123229),
-          content: Row(
-            children: [
-              const Icon(Icons.water_drop, size: 16, color: Color(0xFF48B9C9)),
-              const SizedBox(width: 8),
-              Expanded(child: Text('${meal.type} 식단을 기록했어요')),
-            ],
-          ),
-        ),
-      );
+    showAppToast(context, '${meal.type} 식단을 기록했어요');
   }
 
   Future<void> _recordWeight() async {
@@ -404,7 +415,7 @@ class _HomeHeroState extends State<_HomeHero> {
                 _AiBadge(),
                 SizedBox(height: 3),
                 Text(
-                  '단백질이 34g 부족해요',
+                  '단백질이 53g 부족해요',
                   style: TextStyle(
                     color: AppTheme.primary,
                     fontSize: 15,
@@ -630,7 +641,7 @@ class _DashboardDetails extends StatelessWidget {
               width: 70,
               height: 70,
               child: CircularProgressIndicator(
-                value: (_total(1) / 2442).clamp(0.0, 1.0),
+                value: (_total(1) / calorieGoal).clamp(0.0, 1.0),
                 strokeWidth: 8,
                 backgroundColor: Color(0xFFDDE9E5),
               ),
@@ -643,8 +654,9 @@ class _DashboardDetails extends StatelessWidget {
                   TextSpan(
                     children: [
                       TextSpan(
-                        text: MaterialLocalizations.of(context)
-                            .formatDecimal((2442 - _total(1)).clamp(0, 2442)),
+                        text: MaterialLocalizations.of(context).formatDecimal(
+                          (calorieGoal - _total(1)).clamp(0, calorieGoal),
+                        ),
                         style: const TextStyle(fontSize: 30),
                       ),
                       TextSpan(
@@ -659,7 +671,7 @@ class _DashboardDetails extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '섭취  · 목표 2,442 kcal',
+                  '섭취  · 목표 ${MaterialLocalizations.of(context).formatDecimal(calorieGoal)} kcal',
                   style: TextStyle(color: AppTheme.muted, fontSize: 12),
                 ),
               ],
@@ -672,24 +684,24 @@ class _DashboardDetails extends StatelessWidget {
             Expanded(
               child: _Macro(
                 label: '탄수화물',
-                value: ' / 256g',
-                progress: (_total(2) / 256).clamp(0.0, 1.0),
+                value: ' / ${macroGoals.carbs}g',
+                progress: (_total(2) / macroGoals.carbs).clamp(0.0, 1.0),
               ),
             ),
             SizedBox(width: 14),
             Expanded(
               child: _Macro(
                 label: '단백질',
-                value: ' / 128g',
-                progress: (_total(3) / 128).clamp(0.0, 1.0),
+                value: ' / ${macroGoals.protein}g',
+                progress: (_total(3) / macroGoals.protein).clamp(0.0, 1.0),
               ),
             ),
             SizedBox(width: 14),
             Expanded(
               child: _Macro(
                 label: '지방',
-                value: ' / 64g',
-                progress: (_total(4) / 64).clamp(0.0, 1.0),
+                value: ' / ${macroGoals.fat}g',
+                progress: (_total(4) / macroGoals.fat).clamp(0.0, 1.0),
               ),
             ),
           ],

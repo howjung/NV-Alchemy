@@ -6,6 +6,8 @@ abstract final class AppTheme {
   static const background = Color(0xFFF3F8F7);
   static const muted = Color(0xFF5B7068);
   static const border = Color(0xFFDCE9E6);
+  // 흰 배경 위 글자·버튼 대비 5.4:1(Figma의 D9534F는 3.96:1이라 진하게 바꿈).
+  static const danger = Color(0xFFC0392B);
 
   static ThemeData get light => ThemeData(
     useMaterial3: true,

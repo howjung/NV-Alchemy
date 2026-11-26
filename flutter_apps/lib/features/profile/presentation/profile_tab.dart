@@ -2,7 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/state/input_rules.dart';
+import '../../../core/state/moderation.dart';
+import '../../../core/state/my_posts.dart';
+import '../../../core/state/body_metrics.dart';
+import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../social/presentation/post_detail_screen.dart';
+import '../../../core/widgets/app_overlays.dart';
 import 'profile_text.dart';
 
 const _green = AppTheme.primary;
@@ -20,6 +27,7 @@ enum ProfileView {
   address,
   payment,
   alerts,
+  posts,
   blocked,
   notices,
   help,
@@ -38,20 +46,27 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  String _name = '홍길동';
-  String _gender = '남성';
-  String _age = '25';
-  String _height = '175';
-  String _goal = '68';
-  String _calories = '2442';
-  String _activity = '보통 활동';
-  String _food = '밀키트 위주';
+  // 값은 앱 전체가 공유하는 userProfile에 있다(저장·복원).
+  String get _name => userProfile['name']!;
+  set _name(String v) => userProfile['name'] = v;
+  String get _gender => userProfile['gender']!;
+  set _gender(String v) => userProfile['gender'] = v;
+  String get _age => userProfile['age']!;
+  set _age(String v) => userProfile['age'] = v;
+  String get _height => userProfile['height']!;
+  set _height(String v) => userProfile['height'] = v;
+  String get _goal => userProfile['goal']!;
+  set _goal(String v) => userProfile['goal'] = v;
+  String get _calories => userProfile['calories']!;
+  set _calories(String v) => userProfile['calories'] = v;
+  String get _activity => userProfile['activity']!;
+  set _activity(String v) => userProfile['activity'] = v;
+  String get _food => userProfile['food']!;
+  set _food(String v) => userProfile['food'] = v;
   bool _monthly = false;
-  final _alerts = [true, true, true];
-  final _addresses = <List<String>>[
-    ['집', '홍길동', '010-1234-5678', '서울특별시 강남구 테헤란로 123', '101동 1001호'],
-  ];
-  final _cards = ['신한카드 ···· 1234'];
+  final _alerts = userAlerts;
+  final _addresses = userAddresses;
+  final _cards = userCards;
 
   void _open(ProfileView view) => Navigator.of(context).push<void>(
     MaterialPageRoute(
@@ -84,22 +99,25 @@ class _ProfileTabState extends State<ProfileTab> {
             ),
             const SizedBox(height: 20),
             _panel([
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: _avatar(30),
-                title: Text(_name, style: _strong.copyWith(fontSize: 20)),
-                subtitle: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_email, style: _small),
-                    Text(
-                      '신체 지표 · 목표 진행 보기',
-                      style: TextStyle(color: AppTheme.accent, fontSize: 12),
-                    ),
-                  ],
+              Material(
+                type: MaterialType.transparency,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: _avatar(30),
+                  title: Text(_name, style: _strong.copyWith(fontSize: 20)),
+                  subtitle: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_email, style: _small),
+                      Text(
+                        '신체 지표 · 목표 진행 보기',
+                        style: TextStyle(color: AppTheme.accent, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  trailing: const Icon(Icons.chevron_right, color: _muted),
+                  onTap: () => _open(ProfileView.metrics),
                 ),
-                trailing: const Icon(Icons.chevron_right, color: _muted),
-                onTap: () => _open(ProfileView.metrics),
               ),
             ]),
             const SizedBox(height: 16),
@@ -109,6 +127,15 @@ class _ProfileTabState extends State<ProfileTab> {
                 () => Navigator.pushNamed(context, AppRoutes.points),
                 icon: Icons.account_balance_wallet_outlined,
                 value: '2,500P',
+              ),
+              ValueListenableBuilder<List<MyPost>>(
+                valueListenable: myPosts,
+                builder: (context, posts, _) => _row(
+                  '게시물 관리',
+                  () => _open(ProfileView.posts),
+                  icon: Icons.photo_library_outlined,
+                  value: posts.isEmpty ? null : '${posts.length}개',
+                ),
               ),
             ]),
             const SizedBox(height: 24),
@@ -187,15 +214,21 @@ class _ProfileTabState extends State<ProfileTab> {
               _row('서비스 이용약관', () => _open(ProfileView.terms)),
               _row('개인정보 처리방침', () => _open(ProfileView.privacy)),
               _row('오픈소스 라이선스', () => _open(ProfileView.licenses)),
-              const ListTile(
-                title: Text('앱 버전'),
-                trailing: Text('1.0.0', style: _small),
+              ListTile(
+                title: const Text('앱 버전'),
+                trailing: const Text('1.0.0', style: _small),
+                onTap: () => _toast(context, '최신 버전이에요', tab: true),
               ),
             ]),
             const SizedBox(height: 16),
             OutlinedButton(
               onPressed: () async {
-                if (await _confirm(context, '로그아웃', '로그아웃하시겠어요?') &&
+                if (await showConfirmPopup(
+                      context,
+                      title: '로그아웃할까요?',
+                      message: '언제든 다시 로그인할 수 있어요.',
+                      confirmLabel: '로그아웃',
+                    ) &&
                     context.mounted) {
                   Navigator.pushNamedAndRemoveUntil(
                     context,
@@ -346,15 +379,11 @@ class _ProfileTabState extends State<ProfileTab> {
                 ['도시락 · 샐러드처럼 바로 먹는 식단', '간단히 조리하는 식단', '완제품과 밀키트를 함께'][index],
                 style: _small,
               ),
-              trailing: Icon(
-                _food == _foodStyles[index]
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                color: AppTheme.accent,
-              ),
+              trailing: _food == _foodStyles[index] ? _checkMark : null,
               onTap: () {
                 setState(() => _food = _foodStyles[index]);
                 refresh(() {});
+                saveUserData();
               },
             ),
         ]),
@@ -374,49 +403,46 @@ class _ProfileTabState extends State<ProfileTab> {
         const SizedBox(height: 10),
         const Text('탈퇴하면 기록과 포인트가 모두 삭제되고 되돌릴 수 없어요.', style: _small),
       ]),
-      ProfileView.address => _page(
-        context,
-        '배송지 관리',
-        [
-          if (_addresses.isEmpty) _panel([const Text('등록한 배송지가 없어요.')]),
-          for (var i = 0; i < _addresses.length; i++) ...[
-            _menu([
-              _row(
-                '${_addresses[i][0]}${i == 0 ? ' · 기본' : ''}',
-                () => _editAddress(context, refresh, i),
-                subtitle:
-                    '${_addresses[i][3]} ${_addresses[i][4]}\n${_addresses[i][1]} · ${_addresses[i][2]}',
-              ),
-            ]),
-            const SizedBox(height: 10),
-          ],
-        ],
-        trailing: TextButton(
-          onPressed: () => _editAddress(context, refresh, null),
-          child: const Text('추가'),
-        ),
-      ),
-      ProfileView.payment => _page(
-        context,
-        '결제 수단',
-        [
+      ProfileView.address => _page(context, '배송지 관리', [
+        if (_addresses.isEmpty) _panel([const Text('등록한 배송지가 없어요.')]),
+        for (var i = 0; i < _addresses.length; i++) ...[
           _menu([
-            for (var i = 0; i < _cards.length; i++)
-              ListTile(
-                leading: const Icon(Icons.credit_card),
-                title: Text(_cards[i]),
-                trailing: i == 0 ? const Text('기본', style: _small) : null,
-              ),
-            if (_cards.isEmpty) const ListTile(title: Text('등록한 결제 수단이 없어요.')),
+            _row(
+              _addresses[i][0],
+              badge: i == 0 ? '기본' : null,
+              () => _editAddress(context, refresh, i),
+              subtitle:
+                  '${_addresses[i][3]} ${_addresses[i][4]}\n${_addresses[i][1]} · ${_addresses[i][2]}',
+            ),
           ]),
-          const SizedBox(height: 14),
-          const Text('프로토타입에서는 카드사와 끝 4자리만 저장해요.', style: _small),
+          const SizedBox(height: 10),
         ],
-        trailing: TextButton(
-          onPressed: () => _addCard(context, refresh),
-          child: const Text('추가'),
+      ], trailing: _topAction('추가', () => _editAddress(context, refresh, null))),
+      ProfileView.payment => _page(context, '결제 수단', [
+        _menu([
+          for (var i = 0; i < _cards.length; i++)
+            ListTile(
+              leading: const Icon(Icons.credit_card, color: _green),
+              title: Text(_cards[i]),
+              trailing: i == 0
+                  ? const Text(
+                      '기본',
+                      style: TextStyle(
+                        color: AppTheme.accent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+          if (_cards.isEmpty) const ListTile(title: Text('등록한 결제 수단이 없어요.')),
+        ]),
+        const SizedBox(height: 14),
+        const Text(
+          '프로토타입에서는 카드사와 끝 4자리만 저장해요. 실제 앱에서는 결제 대행사(PG) 결제창에서 카드 정보를 입력하고, 앱에는 카드 번호를 저장하지 않아요.',
+          style: _small,
         ),
-      ),
+      ], trailing: _topAction('추가', () => _addCard(context, refresh))),
       ProfileView.alerts => _page(context, '알림 설정', [
         _menu([
           for (var i = 0; i < _alerts.length; i++)
@@ -427,23 +453,55 @@ class _ProfileTabState extends State<ProfileTab> {
                 style: _small,
               ),
               value: _alerts[i],
-              onChanged: (value) => refresh(() => _alerts[i] = value),
+              onChanged: (value) {
+                refresh(() => _alerts[i] = value);
+                saveUserData();
+              },
             ),
         ]),
         const SizedBox(height: 10),
         const Text('끈 알림은 알림함에도 쌓이지 않아요.', style: _small),
         _group('기기 알림', [
-          const ListTile(
-            title: Text('기기 알림 권한'),
-            trailing: Text('허용 필요', style: _small),
+          ListTile(
+            leading: const Icon(Icons.notifications_none, color: _green),
+            title: const Text('기기 알림 권한'),
+            trailing: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('허용 필요', style: _small),
+                Icon(Icons.chevron_right, size: 20, color: _muted),
+              ],
+            ),
+            onTap: () => _toast(context, '기기 설정에서 알림을 허용해 주세요'),
           ),
         ]),
         const SizedBox(height: 10),
         const Text('권한을 허용하면 앱을 닫아도 알림을 받을 수 있어요.', style: _small),
       ]),
       ProfileView.blocked => _page(context, '차단한 사용자', [
-        const SizedBox(height: 28),
-        _panel([const Center(child: Text('차단한 사용자가 없어요.'))]),
+        const SizedBox(height: 12),
+        if (blockedUsers.value.isEmpty)
+          _panel([
+            const Icon(Icons.group_outlined, color: _muted, size: 28),
+            const SizedBox(height: 8),
+            const Center(child: Text('차단한 사용자가 없어요.')),
+          ])
+        else
+          _menu([
+            for (final name in blockedUsers.value)
+              ListTile(
+                leading: _avatar(18),
+                title: Text(name, style: const TextStyle(color: _green)),
+                trailing: TextButton(
+                  onPressed: () {
+                    unblockUser(name);
+                    refresh(() {});
+                    _toast(context, '$name님의 차단을 해제했어요');
+                  },
+                  child: const Text('해제'),
+                ),
+              ),
+          ]),
         const SizedBox(height: 12),
         const Center(
           child: Text('차단을 해제하면 그 사용자의 게시물과 댓글이 다시 보여요.', style: _small),
@@ -451,35 +509,15 @@ class _ProfileTabState extends State<ProfileTab> {
       ]),
       ProfileView.notices => _page(context, '공지사항', [
         _menu([
-          _row(
-            '연속 기록 보상이 생겼어요',
-            () => _message(
-              context,
-              '연속 기록 보상이 생겼어요',
-              '식단을 하루에 처음 기록하면 5P를 받고, 연속 기록 일수가 늘어나요.',
+          for (final (title, date, body) in _notices)
+            _row(
+              title,
+              () => _infoSheet(context, title, date, body),
+              subtitle: date,
             ),
-            subtitle: '2026.10.21',
-          ),
-          _row(
-            '상품 구매 포인트 적립 정책 변경',
-            () => _message(
-              context,
-              '상품 구매 포인트 적립 정책 변경',
-              '상품 구매 후 포인트 내역을 확인할 수 있어요.',
-            ),
-            subtitle: '안내',
-          ),
-          _row(
-            'Antifreeze 서비스를 시작해요',
-            () => _message(
-              context,
-              'Antifreeze 서비스를 시작해요',
-              '식단을 기록하고 크루와 함께 꾸준히 이어가세요.',
-            ),
-            subtitle: '안내',
-          ),
         ]),
       ]),
+      ProfileView.posts => _managePosts(context, refresh),
       ProfileView.help => _help(context),
       ProfileView.terms => _document(context, '서비스 이용약관', terms),
       ProfileView.privacy => _document(context, '개인정보 처리방침', privacy),
@@ -487,166 +525,399 @@ class _ProfileTabState extends State<ProfileTab> {
     };
   }
 
-  Widget _metrics(BuildContext context, StateSetter refresh) => _page(
-    context,
-    '프로필',
-    [
-      Row(
-        children: [
-          _avatar(36),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _metrics(BuildContext context, StateSetter refresh) {
+    final gap = goalGap;
+    final remaining = numText(double.parse(gap.remaining.toStringAsFixed(1)));
+    // 시연 기준일(홈과 같은 10월 21일)에서 주 0.5kg 속도로 계산한다.
+    final weeks = (gap.remaining / .5).ceil();
+    final reach = DateTime(2026, 10, 21).add(Duration(days: weeks * 7));
+    final macros = macroGoals;
+    final energy = [macros.carbs * 4, macros.protein * 4, macros.fat * 9];
+    final total = energy.fold(0, (a, b) => a + b);
+    final kcal = calorieGoal;
+    return _page(
+      context,
+      '프로필',
+      [
+        Row(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
               children: [
-                Text(_name, style: _strong.copyWith(fontSize: 22)),
-                const Text(_email, style: _small),
-                Text(
-                  '만 $_age세 · $_gender · $_height'
-                  'cm',
-                  style: _small,
+                _avatar(36),
+                Positioned(
+                  right: -4,
+                  bottom: -4,
+                  child: GestureDetector(
+                    onTap: () => _toast(context, '프로필 사진 변경은 준비 중이에요'),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: _blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFFF3F8F7),
+                          width: 3,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.photo_camera,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 26),
-      const Text(
-        '목표 진행',
-        style: TextStyle(
-          color: _green,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      const SizedBox(height: 9),
-      _panel([
-        Row(
-          children: [
+            const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                '${(74 - (double.tryParse(_goal) ?? 68)).abs().toStringAsFixed(1)}kg 남음',
-                style: _strong.copyWith(fontSize: 24),
-              ),
-            ),
-            const Text(
-              '35%',
-              style: TextStyle(
-                color: AppTheme.accent,
-                fontWeight: FontWeight.bold,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_name, style: _strong.copyWith(fontSize: 22)),
+                  const Text(_email, style: _small),
+                  Text('만 $_age세 · $_gender · ${_height}cm', style: _small),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        LinearProgressIndicator(
-          value: .35,
-          color: _blue,
-          backgroundColor: AppTheme.border,
-          borderRadius: BorderRadius.circular(5),
-          minHeight: 6,
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('시작 77.3kg', style: _small),
-            const Text('현재 74kg', style: _small),
-            Text(
-              '목표 $_goal'
-              'kg',
-              style: _small,
-            ),
-          ],
-        ),
-        const Divider(color: AppTheme.border),
+        const SizedBox(height: 26),
         const Text(
-          '권장 속도(주 0.5kg)로 가면 약 12주 뒤 · 1월 5일 전후에 도달해요.',
-          style: _small,
-        ),
-      ]),
-      const SizedBox(height: 30),
-      const Text(
-        '나의 신체 지표',
-        style: TextStyle(
-          color: _green,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      const SizedBox(height: 9),
-      _panel([
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('BMI', style: _small),
-            Text('과체중', style: _small),
-          ],
-        ),
-        const Text(
-          '24.2',
+          '목표 진행',
           style: TextStyle(
             color: _green,
-            fontSize: 28,
+            fontSize: 20,
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: .55,
-          color: const Color(0xFF99D6E1),
-          backgroundColor: AppTheme.border,
-          borderRadius: BorderRadius.circular(4),
-          minHeight: 8,
+        const SizedBox(height: 9),
+        _panel([
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(
+                child: gap.remaining == 0
+                    ? Text('목표 달성', style: _strong.copyWith(fontSize: 26))
+                    : Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${remaining}kg ',
+                              style: _strong.copyWith(fontSize: 26),
+                            ),
+                            TextSpan(
+                              text: '${gap.verb} 남음',
+                              style: const TextStyle(
+                                color: _muted,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+              Text(
+                '${(goalProgress * 100).round()}%',
+                style: const TextStyle(
+                  color: AppTheme.accent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: goalProgress,
+            color: _blue,
+            backgroundColor: AppTheme.border,
+            borderRadius: BorderRadius.circular(5),
+            minHeight: 6,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _labelValue('시작 ', '${userProfile['startWeight']}kg'),
+              _labelValue('현재 ', '${userProfile['weight']}kg'),
+              _labelValue('목표 ', '${_goal}kg'),
+            ],
+          ),
+          const Divider(color: AppTheme.border),
+          if (gap.remaining > 0)
+            Text.rich(
+              TextSpan(
+                style: _small,
+                children: [
+                  const TextSpan(text: '권장 속도(주 0.5kg)로 가면 약 '),
+                  TextSpan(
+                    text: '$weeks주 뒤 · ${reach.month}월 ${reach.day}일',
+                    style: const TextStyle(
+                      color: _green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const TextSpan(text: ' 전후에 도달해요.'),
+                ],
+              ),
+            )
+          else
+            const Text('목표 체중에 도달했어요.', style: _small),
+        ]),
+        const SizedBox(height: 30),
+        const Text(
+          '나의 신체 지표',
+          style: TextStyle(
+            color: _green,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
         ),
-        const SizedBox(height: 8),
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+        const SizedBox(height: 9),
+        _panel([
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('BMI', style: _small),
+              Text(bmiLabel, style: _small),
+            ],
+          ),
+          Text(
+            bmi.toStringAsFixed(1),
+            style: const TextStyle(
+              color: _green,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _bmiScale(),
+          const SizedBox(height: 6),
+          const Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '저체중',
+                  style: _bmiLegend,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  '정상 18.5~23',
+                  style: _bmiLegend,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  '과체중 23~',
+                  style: _bmiLegend,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('저체중', style: _small),
-            Text('정상 18.5~23', style: _small),
-            Text('과체중 23~', style: _small),
+            Expanded(
+              child: _metricCard(
+                '기초대사량',
+                _thousands(bmr),
+                'kcal',
+                '가만히 있어도 쓰는 에너지',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _metricCard(
+                '하루 목표 칼로리',
+                _thousands(kcal),
+                'kcal',
+                '활동량 $_activity 기준',
+              ),
+            ),
           ],
         ),
-      ]),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _panel([_stat('기초대사량', '1,714 kcal')])),
-          const SizedBox(width: 10),
-          Expanded(child: _panel([_stat('하루 목표 칼로리', '$_calories kcal')])),
-        ],
-      ),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _panel([_stat('하루 물 권장량', '2.2 L')])),
-          const SizedBox(width: 10),
-          Expanded(child: _panel([_stat('최근 7일 평균 섭취', '677 kcal')])),
-        ],
-      ),
-      _group('하루 권장 영양', [
-        const ListTile(title: Text('탄수화물'), trailing: Text('256g')),
-        const ListTile(title: Text('단백질'), trailing: Text('128g')),
-        const ListTile(title: Text('지방'), trailing: Text('64g')),
-      ]),
-      const SizedBox(height: 12),
-      const Text('모든 수치는 입력한 정보로 계산한 참고값이에요.', style: _small),
-      const SizedBox(height: 14),
-      _menu([
-        _row(
-          '정보 수정',
-          () => _editMetrics(context, refresh),
-          subtitle: '닉네임 · 신체 정보 · 활동량 · 목표 칼로리',
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _metricCard(
+                '하루 물 권장량',
+                waterLiters.toStringAsFixed(1),
+                'L',
+                '체중 1kg당 30ml',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _metricCard(
+                '최근 7일 평균 섭취',
+                '677',
+                'kcal',
+                '기록한 7일 기준 · 목표 대비\n${_thousands(677 - kcal)}',
+              ),
+            ),
+          ],
         ),
-      ]),
-    ],
-    trailing: TextButton(
-      onPressed: () => _editMetrics(context, refresh),
-      child: const Text('편집'),
-    ),
-  );
+        const SizedBox(height: 22),
+        const Text(
+          '하루 권장 영양',
+          style: TextStyle(
+            color: _green,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 9),
+        _panel([
+          Row(
+            children: [
+              for (var i = 0; i < 3; i++) ...[
+                if (i > 0) const SizedBox(width: 3),
+                Expanded(
+                  child: Container(
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: i == 2 ? const Color(0xFF9AAAA4) : _blue,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final (i, label, grams) in [
+                (0, '탄수화물', macros.carbs),
+                (1, '단백질', macros.protein),
+                (2, '지방', macros.fat),
+              ])
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 7, right: 6),
+                        child: CircleAvatar(
+                          radius: 4,
+                          backgroundColor: i == 2
+                              ? const Color(0xFF9AAAA4)
+                              : _blue,
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label, style: _small),
+                            Text(
+                              '${grams}g',
+                              style: _strong.copyWith(fontSize: 17),
+                            ),
+                            Text(
+                              '${total == 0 ? 0 : (energy[i] * 100 / total).round()}%',
+                              style: _bmiLegend,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ]),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
+          child: Text(
+            '모든 수치는 입력한 정보로 계산한 참고값이에요. 질환이 있거나 급격한 체중 변화를 계획한다면 전문가와 상담하세요.',
+            style: TextStyle(color: _muted, fontSize: 13, height: 1.5),
+          ),
+        ),
+        const SizedBox(height: 20),
+        _menu([
+          _row(
+            '정보 수정',
+            () => _editMetrics(context, refresh),
+            icon: Icons.tune,
+            subtitle: '닉네임 · 신체 정보 · 활동량 · 목표 칼로리',
+          ),
+        ]),
+      ],
+      trailing: TextButton(
+        onPressed: () => _editMetrics(context, refresh),
+        child: const Text('편집'),
+      ),
+    );
+  }
+
+  // 저체중·정상·과체중 3구간 눈금과 현재 BMI 위치.
+  Widget _bmiScale() {
+    final v = bmi;
+    final idx = v < 18.5 ? 0 : (v < 23 ? 1 : 2);
+    final frac = switch (idx) {
+      0 => ((v - 14) / 4.5).clamp(0.0, 1.0),
+      1 => (v - 18.5) / 4.5,
+      _ => ((v - 23) / 9).clamp(0.0, 1.0),
+    };
+    return LayoutBuilder(
+      builder: (context, box) => SizedBox(
+        height: 8,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Row(
+              children: [
+                for (var i = 0; i < 3; i++) ...[
+                  if (i > 0) const SizedBox(width: 3),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: i == idx
+                            ? const Color(0x8C49B3C5)
+                            : AppTheme.border,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            Positioned(
+              left: (box.maxWidth * (idx + frac) / 3 - 2).clamp(
+                0.0,
+                box.maxWidth - 4,
+              ),
+              top: -4,
+              child: Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: _green,
+                  borderRadius: BorderRadius.circular(2),
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Future<void> _editMetrics(BuildContext context, StateSetter refresh) async {
     final fields = [_name, _age, _height, _goal, _calories];
@@ -664,7 +935,12 @@ class _ProfileTabState extends State<ProfileTab> {
               '정보 수정',
               [
                 _group('프로필', [
-                  _field('닉네임', fields[0], (value) => fields[0] = value),
+                  _inlineField(
+                    '닉네임',
+                    fields[0],
+                    (value) => fields[0] = value,
+                    check: nicknameError,
+                  ),
                 ]),
                 _group('신체 정보', [
                   Padding(
@@ -675,38 +951,66 @@ class _ProfileTabState extends State<ProfileTab> {
                       (value) => update(() => gender = value),
                     ),
                   ),
-                  for (var i = 1; i <= 3; i++)
-                    _field(
-                      ['', '나이', '키', '목표 체중'][i],
-                      fields[i],
-                      (value) => fields[i] = value,
-                      numeric: true,
-                    ),
+                  _inlineField(
+                    '나이',
+                    fields[1],
+                    (value) => fields[1] = value,
+                    unit: '세',
+                    numeric: true,
+                  ),
+                  _inlineField(
+                    '키',
+                    fields[2],
+                    (value) => fields[2] = value,
+                    unit: 'cm',
+                    numeric: true,
+                    check: (v) => rangeError('키', v, heightRange, 'cm'),
+                  ),
+                  _inlineField(
+                    '목표 체중',
+                    fields[3],
+                    (value) => fields[3] = value,
+                    unit: 'kg',
+                    numeric: true,
+                    check: (v) => rangeError('목표 체중', v, weightRange, 'kg'),
+                  ),
                 ]),
                 _group('활동량', [
-                  for (final item in ['비활동적', '보통 활동', '활동적'])
+                  for (final (item, hint) in [
+                    ('비활동적', '운동을 거의 하지 않아요'),
+                    ('보통 활동', '주 1~3회 가볍게 움직여요'),
+                    ('활동적', '주 4~5회 꾸준히 움직여요'),
+                  ])
                     ListTile(
-                      title: Text(item),
-                      trailing: Icon(
-                        activity == item
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
-                        color: AppTheme.accent,
+                      title: Text(
+                        item,
+                        style: const TextStyle(color: _green, fontSize: 16),
                       ),
+                      subtitle: Text(hint, style: _small),
+                      selected: activity == item,
+                      trailing: activity == item ? _checkMark : null,
                       onTap: () => update(() => activity = item),
                     ),
                 ]),
                 _group('목표 칼로리', [
-                  _field(
+                  _inlineField(
                     '하루 목표',
                     fields[4],
                     (value) => fields[4] = value,
+                    unit: 'kcal',
                     numeric: true,
                   ),
                 ]),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
+                  child: Text(
+                    '현재 체중 ${userProfile['weight']}kg 기준으로 활동량을 바꾸면 자동 계산돼요. 직접 고칠 수도 있어요.',
+                    style: _small,
+                  ),
+                ),
               ],
               back: '프로필',
-              action: _action('저장', () {
+              trailing: _topAction('저장', () {
                 if (form.currentState!.validate()) Navigator.pop(context, true);
               }),
             ),
@@ -715,6 +1019,14 @@ class _ProfileTabState extends State<ProfileTab> {
       ),
     );
     if (saved != true || !mounted) return;
+    if (context.mounted) _toast(context, '저장되었어요');
+    // 목표 칼로리를 직접 고치지 않았고 계산 재료가 바뀌었으면 권장 칼로리로 다시 계산한다.
+    final recalc =
+        fields[4].trim() == _calories &&
+        (fields[1].trim() != _age ||
+            fields[2].trim() != _height ||
+            gender != _gender ||
+            activity != _activity);
     setState(() {
       _name = fields[0].trim();
       _age = fields[1].trim();
@@ -723,6 +1035,7 @@ class _ProfileTabState extends State<ProfileTab> {
       _calories = fields[4].trim();
       _gender = gender;
       _activity = activity;
+      if (recalc) _calories = recommendedCalories.toString();
     });
     refresh(() {});
   }
@@ -766,28 +1079,41 @@ class _ProfileTabState extends State<ProfileTab> {
                 ]),
                 const SizedBox(height: 10),
                 const Text('실제 앱에서는 주소 검색으로 도로명 주소를 입력해요.', style: _small),
-                SwitchListTile(
-                  title: const Text('기본 배송지로 설정'),
-                  value: makeDefault,
-                  onChanged: (value) => update(() => makeDefault = value),
-                ),
-                if (index != null)
-                  TextButton(
-                    onPressed: () async {
-                      if (await _confirm(
-                            context,
-                            '배송지 삭제',
-                            '이 배송지를 삭제하시겠어요?',
-                          ) &&
-                          context.mounted) {
-                        Navigator.pop(context, 'delete');
-                      }
-                    },
-                    child: const Text('배송지 삭제'),
+                const SizedBox(height: 16),
+                _menu([
+                  SwitchListTile(
+                    title: const Text('기본 배송지로 설정'),
+                    value: makeDefault,
+                    onChanged: (value) => update(() => makeDefault = value),
                   ),
+                ]),
+                if (index != null) ...[
+                  const SizedBox(height: 16),
+                  _menu([
+                    ListTile(
+                      title: const Center(
+                        child: Text(
+                          '배송지 삭제',
+                          style: TextStyle(color: AppTheme.danger),
+                        ),
+                      ),
+                      onTap: () async {
+                        if (await showConfirmPopup(
+                              context,
+                              title: '배송지를 삭제할까요?',
+                              message: '삭제한 배송지는 되돌릴 수 없어요.',
+                              confirmLabel: '삭제하기',
+                            ) &&
+                            context.mounted) {
+                          Navigator.pop(context, 'delete');
+                        }
+                      },
+                    ),
+                  ]),
+                ],
               ],
               back: '배송지',
-              action: _action('저장', () {
+              trailing: _topAction('저장', () {
                 if (form.currentState!.validate()) {
                   Navigator.pop(context, 'save');
                 }
@@ -798,6 +1124,9 @@ class _ProfileTabState extends State<ProfileTab> {
       ),
     );
     if (result == null || !mounted) return;
+    if (context.mounted) {
+      _toast(context, result == 'save' ? '저장되었어요' : '배송지가 삭제되었어요');
+    }
     setState(() {
       if (index != null) _addresses.removeAt(index);
       if (result == 'save') {
@@ -849,6 +1178,7 @@ class _ProfileTabState extends State<ProfileTab> {
       ),
     );
     if (saved != true || !mounted) return;
+    if (context.mounted) _toast(context, '결제 수단이 추가되었어요');
     setState(() => _cards.add('${issuer.trim()} ···· $lastFour'));
     refresh(() {});
   }
@@ -863,12 +1193,13 @@ class _ProfileTabState extends State<ProfileTab> {
           key: form,
           child: _page(context, '비밀번호 변경', [
             _menu([
-              _field('현재 비밀번호', '', (_) {}, secret: true),
+              _field('현재 비밀번호', '', (_) {}, secret: true, hint: '현재 비밀번호'),
               _field(
                 '새 비밀번호',
                 '',
                 (value) => password = value,
                 secret: true,
+                hint: '영문, 숫자 포함 8자 이상',
                 validator: (value) =>
                     RegExp(r'^(?=.*[A-Za-z])(?=.*\d).{8,}$')
                         .hasMatch(value ?? '')
@@ -880,6 +1211,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 '',
                 (_) {},
                 secret: true,
+                hint: '한 번 더 입력',
                 validator: (value) =>
                     value == password ? null : '새 비밀번호가 일치하지 않아요.',
               ),
@@ -889,7 +1221,8 @@ class _ProfileTabState extends State<ProfileTab> {
             const SizedBox(height: 16),
             _action('변경하기', () {
               if (form.currentState!.validate()) {
-                _message(context, '비밀번호 변경', '데모에서는 입력 형식만 확인할 수 있어요.');
+                _toast(context, '비밀번호가 변경되었어요');
+                Navigator.pop(context);
               }
             }),
           ], back: '계정 관리'),
@@ -914,14 +1247,61 @@ class _ProfileTabState extends State<ProfileTab> {
               [
                 Text(
                   '$_name님, 탈퇴하기 전에\n꼭 확인해 주세요',
-                  style: _strong.copyWith(fontSize: 22),
+                  style: _strong.copyWith(fontSize: 20, height: 1.4),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 _panel([
-                  const Text(
-                    '식단·체중 기록과 포인트가 삭제되고 복구할 수 없어요. 진행 중인 정기 구독은 먼저 해지해 주세요.',
-                  ),
+                  _bullet([
+                    const TextSpan(text: '식단 · 체중 기록과 프로필 정보가 '),
+                    TextSpan(text: '모두 삭제', style: _strong),
+                    const TextSpan(text: '되고 복구할 수 없어요.'),
+                  ]),
+                  _bullet([
+                    const TextSpan(text: '보유 포인트 '),
+                    TextSpan(text: '2,500P', style: _strong),
+                    const TextSpan(text: '가 소멸해요.'),
+                  ]),
+                  _bullet([
+                    const TextSpan(text: "크루 피드의 게시물은 '탈퇴한 회원'으로 표시돼요."),
+                  ]),
+                  _bullet([
+                    const TextSpan(text: '주문 · 결제 기록은 관계 법령에 따라 일정 기간 보관돼요.'),
+                  ]),
                 ]),
+                if (hasSubscription)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: Text.rich(
+                      TextSpan(
+                        style: const TextStyle(
+                          color: AppTheme.danger,
+                          fontSize: 13,
+                        ),
+                        children: [
+                          const TextSpan(text: '진행 중인 정기 구독이 있어요. 먼저 '),
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.baseline,
+                            baseline: TextBaseline.alphabetic,
+                            child: GestureDetector(
+                              onTap: () => Navigator.pushNamed(
+                                context,
+                                AppRoutes.orders,
+                              ),
+                              child: const Text(
+                                '정기 구독을 해지',
+                                style: TextStyle(
+                                  color: AppTheme.accent,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const TextSpan(text: '해 주세요.'),
+                        ],
+                      ),
+                    ),
+                  ),
                 _group('떠나시는 이유 (선택)', [
                   for (final item in [
                     '기록하기 번거로워요',
@@ -931,34 +1311,60 @@ class _ProfileTabState extends State<ProfileTab> {
                     '기타',
                   ])
                     ListTile(
-                      title: Text(item),
-                      trailing: Icon(
-                        reason == item
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
+                      minTileHeight: 52,
+                      title: Text(
+                        item,
+                        style: const TextStyle(color: _green, fontSize: 16),
                       ),
+                      selected: reason == item,
+                      trailing: reason == item ? _checkMark : null,
                       onTap: () =>
                           update(() => reason = reason == item ? null : item),
                     ),
                 ]),
-                CheckboxListTile(
-                  value: acknowledged,
-                  title: const Text('안내 사항을 모두 확인했어요'),
-                  onChanged: (value) =>
-                      update(() => acknowledged = value ?? false),
-                ),
-                _field('비밀번호 확인', '', (_) {}, secret: true),
+                const SizedBox(height: 20),
+                _menu([
+                  CheckboxListTile(
+                    value: acknowledged,
+                    title: const Text(
+                      '안내 사항을 모두 확인했어요',
+                      style: TextStyle(color: _green, fontSize: 15),
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    onChanged: (value) =>
+                        update(() => acknowledged = value ?? false),
+                  ),
+                ]),
+                const SizedBox(height: 20),
+                _menu([
+                  _field('비밀번호 확인', '', (_) {}, secret: true, hint: '현재 비밀번호'),
+                ]),
               ],
               back: '계정 관리',
               action: _action(
                 '탈퇴하기',
                 acknowledged
-                    ? () {
-                        if (form.currentState!.validate()) {
-                          _message(context, '회원 탈퇴', '데모에서는 계정을 삭제할 수 없어요.');
+                    ? () async {
+                        if (form.currentState!.validate() &&
+                            await showConfirmPopup(
+                              context,
+                              title: '정말 탈퇴할까요?',
+                              message: '탈퇴하면 기록과 포인트가 모두 삭제되고 되돌릴 수 없어요.',
+                              confirmLabel: '탈퇴하기',
+                            ) &&
+                            context.mounted) {
+                          // 서버 연결 전이라 기기에 저장된 내 정보만 지우고 로그인 화면으로 보낸다.
+                          resetUserData();
+                          saveUserData();
+                          Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            AppRoutes.login,
+                            (_) => false,
+                          );
                         }
                       }
                     : null,
+                color: AppTheme.danger,
               ),
             ),
           ),
@@ -967,50 +1373,148 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  Widget _help(BuildContext context) {
-    const questions = [
-      ('권장 칼로리는 어떻게 계산되나요?', '입력한 신체 정보와 활동량을 기준으로 계산해요.'),
-      ('포인트는 어떻게 모으고 쓰나요?', '식단 기록과 크루 활동으로 모아 쇼핑에서 사용할 수 있어요.'),
-      ('연속 기록이 끊겼어요.', '오늘 식단을 기록하면 다시 시작할 수 있어요.'),
-      ('정기 구독을 건너뛰거나 해지하려면?', '주문 · 구독 내역에서 정기 구독을 선택해 주세요.'),
-      ('크루를 나가고 싶어요.', '내 크루의 더보기 메뉴에서 탈퇴할 수 있어요.'),
-      ('불쾌한 게시물을 봤어요.', '게시물 메뉴에서 신고 옵션을 확인해 주세요.'),
-    ];
-    return _page(context, '고객센터', [
-      _group('자주 묻는 질문', [
-        for (final (question, answer) in questions)
-          _row(question, () => _message(context, question, answer)),
-      ]),
-      _group('1:1 문의', [
-        _row('문의하기', () {
-          final form = GlobalKey<FormState>();
-          Navigator.push<void>(
-            context,
-            MaterialPageRoute(
-              builder: (context) => Form(
-                key: form,
-                child: _page(
-                  context,
-                  '1:1 문의',
-                  [
-                    _menu([_field('문의 내용', '', (_) {}, lines: 5)]),
-                    const SizedBox(height: 14),
-                    const Text(
-                      '평일 10:00~18:00 · 영업일 기준 1~2일 안에 답변해요.',
-                      style: _small,
+  // 프로필 · 게시물 관리: 내가 올린 게시물의 내용·공개 범위 수정과 삭제.
+  Widget _managePosts(BuildContext context, StateSetter refresh) {
+    final posts = myPosts.value;
+    return _page(context, '게시물 관리', [
+      if (posts.isEmpty)
+        _panel([
+          const Icon(Icons.photo_library_outlined, color: _muted, size: 28),
+          const SizedBox(height: 8),
+          const Center(child: Text('올린 게시물이 없어요.')),
+        ])
+      else
+        _menu([
+          for (final post in posts)
+            ListTile(
+              onTap: () => Navigator.of(context)
+                  .push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => PostDetailScreen(
+                        photoIndex: -post.id % 15,
+                        postId: post.id,
+                        caption: post.caption,
+                        time: '방금 전',
+                        store: postStore,
+                      ),
                     ),
-                  ],
-                  back: '고객센터',
-                  action: _action('문의하기', () {
-                    if (form.currentState!.validate()) {
-                      _message(context, '1:1 문의', '데모에서는 문의를 전송할 수 없어요.');
-                    }
-                  }),
+                  )
+                  .then((_) => refresh(() {})),
+              title: Text(
+                post.caption,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _green, fontSize: 15),
+              ),
+              subtitle: Text(
+                '${post.meal} · ${post.visibility}${post.crew ? ' · 크루 인증' : ''}',
+                style: _small,
+              ),
+              trailing: AppMenu<String>(
+                tooltip: '게시물 메뉴',
+                width: 176,
+                onSelected: (action) =>
+                    _postAction(context, post, action, refresh),
+                items: [
+                  const AppMenuItem('edit', '내용 수정'),
+                  for (final v in ['공개', '비공개', if (inCrew.value) '크루만 공개'])
+                    if (v != post.visibility) AppMenuItem(v, '$v로 변경'),
+                  const AppMenuItem('delete', '삭제', danger: true),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(Icons.more_horiz, color: _muted),
                 ),
               ),
             ),
-          );
-        }),
+        ]),
+      const SizedBox(height: 12),
+      const Center(child: Text('삭제한 게시물은 되돌릴 수 없어요.', style: _small)),
+    ]);
+  }
+
+  Future<void> _postAction(
+    BuildContext context,
+    MyPost post,
+    String action,
+    StateSetter refresh,
+  ) async {
+    switch (action) {
+      case 'delete':
+        final ok = await showConfirmPopup(
+          context,
+          title: '게시물을 삭제할까요?',
+          message: '삭제하면 되돌릴 수 없어요.',
+          confirmLabel: '삭제하기',
+        );
+        if (!ok || !context.mounted) return;
+        deleteMyPost(post.id);
+        refresh(() {});
+        _toast(context, '게시물을 삭제했어요');
+      case 'edit':
+        final text = await _editPostText(context, post.caption);
+        if (text == null || !context.mounted) return;
+        updateMyPost(post.id, caption: text);
+        refresh(() {});
+        _toast(context, '저장되었어요');
+      default: // 공개 범위 변경
+        updateMyPost(post.id, visibility: action);
+        refresh(() {});
+        _toast(context, '공개 설정을 "$action"(으)로 바꿨어요');
+    }
+  }
+
+  Future<String?> _editPostText(BuildContext context, String current) =>
+      showDialog<String>(
+        context: context,
+        builder: (_) => _PostTextDialog(initial: current),
+      );
+
+  Widget _help(BuildContext context) {
+    return _page(context, '고객센터', [
+      _group('자주 묻는 질문', [
+        for (final (question, answer) in _faqs)
+          _row(
+            question,
+            () => _infoSheet(context, question, '자주 묻는 질문', answer),
+          ),
+      ]),
+      _group('1:1 문의', [
+        _row(
+          '문의하기',
+          icon: Icons.chat_bubble_outline,
+          subtitle: '평일 10:00~18:00 · 영업일 기준 1~2일 안에 답변해요',
+          () {
+            final form = GlobalKey<FormState>();
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => Form(
+                  key: form,
+                  child: _page(
+                    context,
+                    '1:1 문의',
+                    [
+                      _menu([_field('문의 내용', '', (_) {}, lines: 5)]),
+                      const SizedBox(height: 14),
+                      const Text(
+                        '평일 10:00~18:00 · 영업일 기준 1~2일 안에 답변해요.',
+                        style: _small,
+                      ),
+                    ],
+                    back: '고객센터',
+                    action: _action('문의하기', () {
+                      if (form.currentState!.validate()) {
+                        _toast(context, '문의가 접수되었어요');
+                        Navigator.pop(context);
+                      }
+                    }),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       ]),
     ]);
   }
@@ -1020,13 +1524,16 @@ Widget _document(BuildContext context, String title, List<String> lines) =>
     _page(context, title, [
       for (final line in lines)
         Padding(
-          padding: const EdgeInsets.only(bottom: 5),
+          padding: EdgeInsets.only(
+            top: line.startsWith('# ') ? 14 : 0,
+            bottom: 6,
+          ),
           child: Text(
-            line,
+            line.startsWith('# ') ? line.substring(2) : line,
             style: TextStyle(
               color: _green,
               height: 1.5,
-              fontWeight: RegExp(r'^(제\d+조|\d+\.)').hasMatch(line)
+              fontWeight: line.startsWith('# ')
                   ? FontWeight.bold
                   : FontWeight.normal,
             ),
@@ -1140,9 +1647,25 @@ Widget _row(
   IconData? icon,
   String? value,
   String? subtitle,
+  String? badge,
 }) => ListTile(
   leading: icon == null ? null : Icon(icon, color: _green, size: 21),
-  title: Text(title, style: const TextStyle(color: _green, fontSize: 15)),
+  title: badge == null
+      ? Text(title, style: const TextStyle(color: _green, fontSize: 15))
+      : Row(
+          children: [
+            Text(title, style: const TextStyle(color: _green, fontSize: 15)),
+            const SizedBox(width: 6),
+            Text(
+              badge,
+              style: const TextStyle(
+                color: AppTheme.accent,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
   subtitle: subtitle == null ? null : Text(subtitle, style: _small),
   trailing: Row(
     mainAxisSize: MainAxisSize.min,
@@ -1153,6 +1676,47 @@ Widget _row(
   ),
   onTap: onTap,
 );
+
+const _bmiLegend = TextStyle(color: _muted, fontSize: 12);
+
+String _thousands(int v) =>
+    v.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+
+Widget _labelValue(String label, String value) => Text.rich(
+  TextSpan(
+    style: _small,
+    children: [
+      TextSpan(text: label),
+      TextSpan(
+        text: value,
+        style: const TextStyle(color: _green, fontWeight: FontWeight.bold),
+      ),
+    ],
+  ),
+);
+
+Widget _metricCard(String label, String value, String unit, String caption) =>
+    _panel([
+      Text(label, style: _bmiLegend),
+      const SizedBox(height: 4),
+      Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: value, style: _strong.copyWith(fontSize: 21)),
+            TextSpan(
+              text: ' $unit',
+              style: const TextStyle(
+                color: _muted,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(caption, style: _bmiLegend),
+    ]);
 
 Widget _stat(String label, String value) => Column(
   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1206,9 +1770,10 @@ Widget _field(
   bool secret = false,
   bool required = true,
   int lines = 1,
+  String? hint,
   FormFieldValidator<String>? validator,
 }) => Padding(
-  padding: const EdgeInsets.all(10),
+  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
   child: TextFormField(
     initialValue: initial,
     obscureText: secret,
@@ -1216,7 +1781,24 @@ Widget _field(
     keyboardType: numeric
         ? const TextInputType.numberWithOptions(decimal: true)
         : null,
-    decoration: InputDecoration(labelText: label),
+    // Figma: 테두리 없이 작은 이름 아래에 값을 둔다. 입력 중에만 밑줄로 위치를 보여 준다.
+    decoration: InputDecoration(
+      labelText: label,
+      hintText: hint,
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+      filled: false,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      errorBorder: InputBorder.none,
+      focusedBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: AppTheme.accent),
+      ),
+      focusedErrorBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: AppTheme.danger),
+      ),
+    ),
     onChanged: change,
     validator:
         validator ??
@@ -1231,56 +1813,259 @@ Widget _field(
   ),
 );
 
-Widget _action(String title, VoidCallback? onPressed) => SizedBox(
-  width: double.infinity,
-  height: 50,
-  child: FilledButton(
-    style: FilledButton.styleFrom(
-      backgroundColor: _green,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+// 선택된 항목 오른쪽의 체크 표시(Figma).
+const _checkMark = Icon(Icons.check, color: AppTheme.accent, size: 20);
+
+// 상단 오른쪽 글자 버튼(저장·추가).
+Widget _topAction(String label, VoidCallback onPressed) => TextButton(
+  onPressed: onPressed,
+  style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
+  child: Text(label, style: const TextStyle(fontSize: 17)),
+);
+
+// 왼쪽에 이름, 오른쪽에 값과 단위를 놓는 한 줄 입력(정보 수정).
+Widget _inlineField(
+  String label,
+  String initial,
+  ValueChanged<String> change, {
+  String? unit,
+  bool numeric = false,
+  String? Function(String input)? check,
+}) => Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 16),
+  child: ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 52),
+    child: Row(
+      children: [
+        Text(label, style: const TextStyle(color: _green, fontSize: 16)),
+        Expanded(
+          child: TextFormField(
+            initialValue: initial,
+            textAlign: TextAlign.right,
+            keyboardType: numeric
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : null,
+            style: const TextStyle(color: _green, fontSize: 16),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
+              isDense: true,
+            ),
+            onChanged: change,
+            validator: (value) {
+              final input = value?.trim() ?? '';
+              if (input.isEmpty) return '$label 항목을 입력해 주세요.';
+              if (numeric && !(double.tryParse(input)?.isFinite ?? false)) {
+                return '숫자를 입력해 주세요.';
+              }
+              return check?.call(input);
+            },
+          ),
+        ),
+        if (unit != null) ...[
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 36),
+            child: Text(unit, style: _small.copyWith(fontSize: 15)),
+          ),
+        ],
+      ],
     ),
-    onPressed: onPressed,
-    child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
   ),
 );
 
-Future<bool> _confirm(BuildContext context, String title, String text) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(text),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('확인'),
-          ),
-        ],
+// 목록 기호가 있는 안내 문장 한 줄.
+Widget _bullet(List<InlineSpan> spans) => Padding(
+  padding: const EdgeInsets.symmetric(vertical: 5),
+  child: Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Padding(
+        padding: EdgeInsets.fromLTRB(2, 9, 12, 0),
+        child: CircleAvatar(radius: 2.5, backgroundColor: _muted),
       ),
-    ) ??
-    false;
+      Expanded(
+        child: Text.rich(
+          TextSpan(
+            style: const TextStyle(color: _muted, fontSize: 15, height: 1.5),
+            children: spans,
+          ),
+        ),
+      ),
+    ],
+  ),
+);
 
-void _message(BuildContext context, String title, String text) =>
+Widget _action(String title, VoidCallback? onPressed, {Color color = _green}) =>
+    SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        onPressed: onPressed,
+        child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    );
+
+// 화면 아래에서 띄우는 거리. Figma는 화면 아래에서 131(탭 화면은 하단 탭 높이만큼 뺌).
+void _toast(BuildContext context, String message, {bool tab = false}) =>
+    showAppToast(context, message, bottom: tab ? 48 : 131);
+
+const _notices = [
+  (
+    '연속 기록 보상이 생겼어요',
+    '2026.10.13',
+    '식단을 하루에 처음 기록하면 5P를 받고, 연속 기록 일수가 늘어나요. 물방울 모양의 연속 기록은 홈 상단 물방울 버튼에서 확인할 수 있어요.',
+  ),
+  (
+    '상품 구매 포인트 적립 정책 변경 안내',
+    '2026.10.10',
+    '상품 구매 시 결제 금액의 1%가 포인트로 적립돼요. 적립된 포인트는 다음 주문부터 사용할 수 있어요.',
+  ),
+  (
+    'Antifreeze 서비스를 시작해요',
+    '2026.10.01',
+    'Antifreeze와 함께 AI 맞춤 식단을 시작해 보세요. 식단 기록, 쇼핑, 크루까지 한곳에서 이어져요.',
+  ),
+];
+
+const _faqs = [
+  (
+    '권장 칼로리는 어떻게 계산되나요?',
+    '키, 몸무게, 나이, 성별로 기초대사량을 구하고 활동량을 곱해 하루 목표 칼로리를 계산해요. 프로필 · 신체 지표에서 정보를 바꾸면 바로 반영돼요.',
+  ),
+  (
+    '포인트는 어떻게 모으고 쓰나요?',
+    '식단을 기록하고 연속 기록 보상을 받으면 포인트가 쌓여요. 쌓인 포인트는 쇼핑에서 결제할 때 사용할 수 있어요.',
+  ),
+  ('연속 기록이 끊겼어요.', '하루 한 끼 이상 기록하지 않으면 연속 기록이 0일로 돌아가요. 다음 날부터 다시 쌓을 수 있어요.'),
+  (
+    '정기 구독을 건너뛰거나 해지하려면?',
+    '쇼핑의 주문 · 구독 내역에서 다음 배송 건너뛰기나 구독 해지를 할 수 있어요. 이미 결제한 배송은 그대로 도착해요.',
+  ),
+  (
+    '크루를 나가고 싶어요.',
+    '소셜의 내 크루 화면 오른쪽 위 메뉴에서 크루 탈퇴를 선택하면 돼요. 크루장은 먼저 크루를 삭제해야 해요.',
+  ),
+  (
+    '불쾌한 게시물을 봤어요.',
+    '게시물 오른쪽 위 메뉴에서 신고하거나 작성자를 차단할 수 있어요. 차단한 사용자는 프로필 · 차단한 사용자에서 확인해요.',
+  ),
+];
+
+/// 공지·FAQ 시트 (Figma Overlay/프로필 시트): 제목, 보조 줄, 구분선, 본문, "확인".
+void _infoSheet(BuildContext context, String title, String sub, String body) =>
     showModalBottomSheet<void>(
       context: context,
+      backgroundColor: Colors.white,
+      barrierColor: const Color(0x730F1722),
+      constraints: const BoxConstraints(maxWidth: 402),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: _strong.copyWith(fontSize: 18)),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const SizedBox(height: 12),
-              Text(text, style: _small),
-              const SizedBox(height: 20),
-              _action('닫기', () => Navigator.pop(context)),
+              Text(title, style: _strong.copyWith(fontSize: 18, height: 1.3)),
+              const SizedBox(height: 12),
+              // Figma는 #9AAAA4(흰 배경에서 2.4:1)지만 글자 대비 4.5:1을 위해 공용 보조색을 쓴다.
+              Text(sub, style: _small),
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: AppTheme.border),
+              const SizedBox(height: 12),
+              // 글자를 크게 키우거나 화면이 작아도 넘치지 않게 본문만 스크롤한다.
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Text(
+                    body,
+                    style: const TextStyle(color: _green, fontSize: 15),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _green,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    '확인',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
+
+// 게시물 내용 수정 다이얼로그. 빈 내용은 저장할 수 없다.
+class _PostTextDialog extends StatefulWidget {
+  const _PostTextDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_PostTextDialog> createState() => _PostTextDialogState();
+}
+
+class _PostTextDialogState extends State<_PostTextDialog> {
+  late final _controller = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('내용 수정'),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      minLines: 3,
+      maxLines: 6,
+      onChanged: (_) => setState(() {}),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('취소'),
+      ),
+      TextButton(
+        onPressed: _controller.text.trim().isEmpty
+            ? null
+            : () => Navigator.pop(context, _controller.text.trim()),
+        child: const Text('저장'),
+      ),
+    ],
+  );
+}

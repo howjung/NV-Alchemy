@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../../core/state/moderation.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_overlays.dart';
+import 'post_moderation.dart';
 
 // Figma에 없는 상태(채워진 하트, 보낸 뒤 불꽃 버튼, 댓글 시트)에 쓰는 임시 색.
 const _heart = Color(0xFFD9534F);
@@ -55,6 +57,11 @@ class PostInteractionStore extends ChangeNotifier {
   bool isFlameSent(int post) => _of(post).flameSent;
   List<PostComment> comments(int post) => List.unmodifiable(_of(post).comments);
 
+  void clear() {
+    _posts.clear();
+    notifyListeners();
+  }
+
   void toggleLike(int post) {
     final state = _of(post);
     state.liked = !state.liked;
@@ -77,16 +84,36 @@ class PostInteractionStore extends ChangeNotifier {
   }
 }
 
+/// 소셜 탭과 프로필 · 게시물 관리가 함께 쓰는 좋아요·댓글 상태.
+/// Figma 크루 피드의 두 번째 게시물(좋아요 7, 댓글 3)로 시작한다.
+final postStore = PostInteractionStore()
+  ..seed(1, likes: 7, comments: _seedComments);
+
+const _seedComments = [
+  PostComment('프로필 이름', '단백질 챙기기 대단해요'),
+  PostComment('프로필 이름', '저도 따라 해볼래요'),
+  PostComment('프로필 이름', '내일도 같이 인증해요'),
+];
+
+/// 처음 상태로 되돌린다(테스트·회원 탈퇴 후).
+void resetPostStore() => postStore
+  ..clear()
+  ..seed(1, likes: 7, comments: _seedComments);
+
 /// 소셜 07 게시물 상세.
 class PostDetailScreen extends StatelessWidget {
   const PostDetailScreen({
     required this.photoIndex,
     required this.store,
     this.postId,
+    this.caption = '오운완',
+    this.time = '3분 전',
     super.key,
   });
 
   final int photoIndex;
+  final String caption;
+  final String time;
   final PostInteractionStore store;
 
   /// 좋아요·댓글 상태를 찾는 번호. 없으면 [photoIndex]를 쓴다.
@@ -126,14 +153,18 @@ class PostDetailScreen extends StatelessWidget {
                     ),
                     const Spacer(),
                     // 메뉴 오른쪽 끝을 버튼 오른쪽 끝에, 위쪽을 버튼 안쪽에 맞춘다.
-                    const AppMenu<String>(
+                    AppMenu<String>(
                       tooltip: '게시물 메뉴',
-                      offset: Offset(-88, -14),
-                      items: [
-                        AppMenuItem('hide', '관심 없음'),
-                        AppMenuItem('report', '신고하기'),
-                      ],
-                      child: SizedBox(
+                      offset: const Offset(-88, -14),
+                      width: 164,
+                      items: postMenuItems(mine: (postId ?? photoIndex) < 0),
+                      onSelected: (action) => handlePostMenu(
+                        context,
+                        action: action,
+                        postId: postId ?? photoIndex,
+                        onDone: () => Navigator.maybePop(context),
+                      ),
+                      child: const SizedBox(
                         width: 44,
                         height: 44,
                         child: Align(
@@ -146,19 +177,19 @@ class PostDetailScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 3),
-              const Padding(
-                padding: EdgeInsets.only(left: 2),
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
                 child: Row(
                   children: [
-                    CircleAvatar(
+                    const CircleAvatar(
                       radius: 24,
                       backgroundColor: AppTheme.border,
                       child: Icon(Icons.person, color: Colors.white, size: 35),
                     ),
-                    SizedBox(width: 14),
+                    const SizedBox(width: 14),
                     Text(
-                      '프로필 이름',
-                      style: TextStyle(
+                      authorOf(postId ?? photoIndex),
+                      style: const TextStyle(
                         color: AppTheme.primary,
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
@@ -182,18 +213,18 @@ class PostDetailScreen extends StatelessWidget {
               const SizedBox(height: 17),
               PostActionRow(store: store, postId: postId ?? photoIndex),
               const SizedBox(height: 12),
-              const Text(
-                '오운완',
-                style: TextStyle(
+              Text(
+                caption,
+                style: const TextStyle(
                   color: AppTheme.primary,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 6),
-              const Text(
-                '3분 전',
-                style: TextStyle(color: AppTheme.muted, fontSize: 13),
+              Text(
+                time,
+                style: const TextStyle(color: AppTheme.muted, fontSize: 13),
               ),
             ],
           ),
@@ -231,9 +262,7 @@ class PostActionRow extends StatelessWidget {
       ),
       onFlame: () {
         store.sendFlame(postId);
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(content: Text('불꽃을 보냈어요.')));
+        showAppToast(context, '불꽃을 보냈어요.');
       },
     ),
   );

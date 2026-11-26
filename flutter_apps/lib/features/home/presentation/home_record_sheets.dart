@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/state/body_metrics.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
 import '../../../core/widgets/app_screen_frame.dart';
@@ -252,11 +253,14 @@ class _HomeInfoSheetState extends State<HomeInfoSheet> {
           ),
           const Divider(height: 1, color: AppTheme.border),
         ],
-        const ListTile(
+        ListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text('하루 목표 칼로리'),
-          subtitle: Text('기록한 목표로 자동 계산돼요.', style: _caption),
-          trailing: Text('2,442 kcal', style: _value),
+          title: const Text('하루 목표 칼로리'),
+          subtitle: const Text('기록한 목표로 자동 계산돼요.', style: _caption),
+          trailing: Text(
+            '${MaterialLocalizations.of(context).formatDecimal(calorieGoal)} kcal',
+            style: _value,
+          ),
         ),
         const SizedBox(height: 70),
         PrimaryButton(

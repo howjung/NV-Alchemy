@@ -2,8 +2,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/state/input_rules.dart';
+import '../../../core/state/user_data.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/antifreeze_widgets.dart';
+import '../../../core/widgets/app_overlays.dart';
 import '../../../core/widgets/app_screen_frame.dart';
 
 class ProfileOnboardingScreen extends StatefulWidget {
@@ -15,10 +18,18 @@ class ProfileOnboardingScreen extends StatefulWidget {
 }
 
 class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
+  final _nickname = TextEditingController();
   int _gender = 0;
   DateTime? _birthday;
 
+  @override
+  void dispose() {
+    _nickname.dispose();
+    super.dispose();
+  }
+
   Future<void> _pickBirthday() async {
+    final today = DateTime.now(); // 만 14~100세만 선택 가능(PRD N23)
     var selected = _birthday ?? DateTime(2001, 1, 1);
     final result = await showModalBottomSheet<DateTime>(
       context: context,
@@ -53,16 +64,24 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
                   mode: CupertinoDatePickerMode.date,
                   dateOrder: DatePickerDateOrder.ymd,
                   initialDateTime: selected,
-                  minimumDate: DateTime(1925, 10, 14),
-                  maximumDate: DateTime(2016, 10, 13),
+                  minimumDate: DateTime(
+                    today.year - 100,
+                    today.month,
+                    today.day,
+                  ),
+                  maximumDate: DateTime(
+                    today.year - 14,
+                    today.month,
+                    today.day,
+                  ),
                   onDateTimeChanged: (date) => selected = date,
                 ),
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(12),
               child: Text(
-                '1925년 10월 14일 ~ 2016년 10월 13일 중에서 고를 수 있어요.',
+                '${today.year - 100}년 ${today.month}월 ${today.day}일 ~ ${today.year - 14}년 ${today.month}월 ${today.day}일 중에서 고를 수 있어요.',
                 style: TextStyle(color: AppTheme.muted, fontSize: 12),
               ),
             ),
@@ -104,7 +123,11 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
                   style: TextStyle(color: AppTheme.muted, fontSize: 14),
                 ),
                 const SizedBox(height: 26),
-                const LabeledField(label: '닉네임', hint: '사용할 닉네임'),
+                LabeledField(
+                  label: '닉네임',
+                  hint: '사용할 닉네임',
+                  controller: _nickname,
+                ),
                 const SizedBox(height: 18),
                 const Text(
                   '생년월일',
@@ -162,10 +185,27 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
                 const SizedBox(height: 16),
                 PrimaryButton(
                   label: '다음',
-                  onPressed: () => Navigator.pushNamed(
-                    context,
-                    AppRoutes.onboardingBodyGoal,
-                  ),
+                  onPressed: () {
+                    final birthday = _birthday;
+                    final error =
+                        nicknameError(_nickname.text) ??
+                        (birthday == null ? '생년월일을 선택해 주세요.' : null);
+                    if (error != null || birthday == null) {
+                      showAppToast(context, error!);
+                      return;
+                    }
+                    final now = DateTime.now();
+                    final hadBirthday =
+                        now.month > birthday.month ||
+                        (now.month == birthday.month &&
+                            now.day >= birthday.day);
+                    userProfile
+                      ..['name'] = _nickname.text.trim()
+                      ..['gender'] = _gender == 0 ? '남성' : '여성'
+                      ..['age'] =
+                          '${now.year - birthday.year - (hadBirthday ? 0 : 1)}';
+                    Navigator.pushNamed(context, AppRoutes.onboardingBodyGoal);
+                  },
                 ),
               ],
             ),
@@ -237,9 +277,9 @@ class BodyGoalOnboardingScreen extends StatefulWidget {
 
 class _BodyGoalOnboardingScreenState extends State<BodyGoalOnboardingScreen> {
   int _activity = 1;
-  final _height = TextEditingController(text: '175');
-  final _current = TextEditingController(text: '74');
-  final _goal = TextEditingController(text: '68');
+  final _height = TextEditingController(text: userProfile['height']);
+  final _current = TextEditingController(text: userProfile['weight']);
+  final _goal = TextEditingController(text: userProfile['goal']);
 
   @override
   void dispose() {
@@ -375,11 +415,26 @@ class _BodyGoalOnboardingScreenState extends State<BodyGoalOnboardingScreen> {
                 const SizedBox(height: 28),
                 PrimaryButton(
                   label: '다음',
-                  onPressed: () => Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    AppRoutes.home,
-                    (_) => false,
-                  ),
+                  onPressed: () {
+                    final error =
+                        rangeError('키', _height.text, heightRange, 'cm') ??
+                        rangeError('현재 체중', _current.text, weightRange, 'kg') ??
+                        rangeError('목표 체중', _goal.text, weightRange, 'kg');
+                    if (error != null) {
+                      showAppToast(context, error);
+                      return;
+                    }
+                    userProfile
+                      ..['height'] = _height.text.trim()
+                      ..['weight'] = _current.text.trim()
+                      ..['goal'] = _goal.text.trim()
+                      ..['activity'] = ['비활동적', '보통 활동', '활동적'][_activity];
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      AppRoutes.home,
+                      (_) => false,
+                    );
+                  },
                 ),
               ],
             ),
