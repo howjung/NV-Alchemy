@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Meal } from '../meals/entities/meal.entity';
+import { RecordDay } from '../streak/entities/record-day.entity';
 import { Weight } from '../weights/entities/weight.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { User } from './entities/user.entity';
@@ -47,6 +48,7 @@ export class UsersService {
     return this.dataSource.transaction(async (m) => {
       await m.delete(Weight, { userId: id });
       await m.delete(Meal, { userId: id });
+      await m.delete(RecordDay, { userId: id });
       await m.delete(User, { id });
       return { deleted: true };
     });
