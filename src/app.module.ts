@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module';
 import { WeightsModule } from './weights/weights.module';
 import { MealsModule } from './meals/meals.module';
 import { StreakModule } from './streak/streak.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { StreakModule } from './streak/streak.module';
     WeightsModule,
     MealsModule,
     StreakModule,
+    AiModule,
   ],
   controllers: [AppController],
   // 전역 문지기: @Public()이 없는 모든 API는 로그인이 필요하다
