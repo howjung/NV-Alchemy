@@ -18,7 +18,7 @@ const signup = await call('POST', '/auth/signup', { email: `s${Date.now()}@t.com
 assert.equal(signup.status, 201); token = signup.body.accessToken;
 
 try {
-  assert.deepEqual((await call('GET', '/streak')).body, { days: 0, recordedToday: false, broken: false, nextMilestone: 3 });
+  assert.deepEqual((await call('GET', '/streak')).body, { days: 0, recordedToday: false, broken: false, missedDays: 0, nextMilestone: 3 });
   assert.equal((await call('POST', '/meals', meal('2020-01-01'))).status, 400, '지난 날짜 거절');
 
   const first = await call('POST', '/meals', meal(today));

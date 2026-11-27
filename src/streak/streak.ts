@@ -22,10 +22,14 @@ export function calcStreak(dates: string[], today: string) {
     day--;
   }
 
+  // 마지막 기록 뒤로 통째로 건너뛴 날 수(오늘은 아직 놓친 것이 아니다). 앱 화면의 얼음 단계에 쓴다
+  const missedDays = recorded.size ? Math.max(0, now - Math.max(...recorded) - 1) : 0;
+
   return {
     days,
     recordedToday,
     broken: days === 0 && recorded.size > 0, // 처음 쓰는 사람은 끊긴 것이 아니다
+    missedDays,
     nextMilestone: MILESTONES.find((m) => m > days) ?? null,
   };
 }
