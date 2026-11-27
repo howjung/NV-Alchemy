@@ -2,7 +2,7 @@
   <img src="docs/notion/cover-light-v4.png" alt="Antifreeze - NV Alchemy" width="100%">
 </p>
 
-<p align="center">식단 기록부터 정기 배송까지, 크루와 함께하는 식단 관리 앱</p>
+<p align="center">식단 기록부터 정기 배송까지, 크루와 함께하는 AI 식단 관리 앱</p>
 
 ## 주요 기능
 
